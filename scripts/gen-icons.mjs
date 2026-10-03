@@ -1,0 +1,76 @@
+// Generates src/components/icons.tsx from Material Symbols (Rounded, weight 400).
+// Add an entry below and run `npm run icons`. Names ending in "!" also get a filled variant.
+import { existsSync, writeFileSync } from 'node:fs'
+
+const DIR = 'node_modules/@material-symbols/svg-400/rounded'
+
+// [ExportName, symbol]. Lucide-style names kept so existing imports keep working.
+const ICONS = [
+  // Navigation (filled variant for the active state)
+  ['Home', 'home!'], ['CheckSquare', 'task_alt!'], ['AlarmClock', 'alarm!'], ['Flame', 'local_fire_department!'],
+  ['ShieldOff', 'block!'], ['Dumbbell', 'fitness_center!'], ['Timer', 'timer!'], ['BarChart3', 'bar_chart!'],
+  ['Settings', 'settings!'], ['MoreHorizontal', 'more_horiz'], ['Menu', 'menu'], ['Apps', 'apps'],
+  // Actions
+  ['Plus', 'add'], ['X', 'close'], ['Check', 'check'], ['Pencil', 'edit!'], ['Trash2', 'delete!'], ['Search', 'search'],
+  ['Minus', 'remove'], ['Undo', 'undo'], ['Download', 'download'], ['Upload', 'upload'], ['LogOut', 'logout'],
+  ['Login', 'login'], ['RefreshCw', 'sync'], ['OpenInNew', 'open_in_new'], ['Share', 'share'], ['MoreVert', 'more_vert'],
+  ['ArrowRight', 'arrow_forward'], ['ArrowLeft', 'arrow_back'], ['ChevronLeft', 'chevron_left'], ['ChevronRight', 'chevron_right'],
+  ['ChevronDown', 'keyboard_arrow_down'], ['ChevronUp', 'keyboard_arrow_up'], ['ArrowDropDown', 'arrow_drop_down'],
+  ['GripVertical', 'drag_indicator'], ['Sort', 'sort'], ['FilterList', 'filter_list'], ['Maximize2', 'fullscreen'],
+  ['Minimize2', 'fullscreen_exit'], ['Smartphone', 'install_desktop'], ['Pin', 'keep!'],
+  // Media / timers
+  ['Play', 'play_arrow!'], ['Pause', 'pause!'], ['Square', 'stop!'], ['SkipForward', 'skip_next!'], ['RotateCcw', 'restart_alt'],
+  ['Replay', 'replay'], ['Snooze', 'snooze'], ['Hourglass', 'hourglass_empty'], ['Volume2', 'volume_up!'], ['VolumeOff', 'no_sound'],
+  ['Vibrate', 'mobile_vibrate'],
+  // Status
+  ['Bell', 'notifications!'], ['BellOff', 'notifications_off'], ['BellRing', 'notifications_active!'], ['AlarmAdd', 'alarm_add'],
+  ['AlarmOn', 'alarm_on'], ['Cloud', 'cloud_done!'], ['CloudOff', 'cloud_off'], ['CloudSync', 'cloud_sync'], ['SyncProblem', 'sync_problem'],
+  ['HardDrive', 'devices'], ['Loader2', 'progress_activity'], ['TriangleAlert', 'warning!'], ['Info', 'info!'], ['Help', 'help!'],
+  ['CheckCircle', 'check_circle!'], ['Circle', 'radio_button_unchecked'], ['Lock', 'lock!'], ['Visibility', 'visibility'],
+  // Content
+  ['Star', 'star!'], ['Flag', 'flag!'], ['Tag', 'sell!'], ['Label', 'label!'], ['Repeat', 'repeat'], ['EventRepeat', 'event_repeat'],
+  ['Clock', 'schedule!'], ['CalendarDays', 'calendar_month!'], ['CalendarToday', 'calendar_today!'], ['CalendarPlus', 'calendar_add_on'],
+  ['EditCalendar', 'edit_calendar'], ['Event', 'event!'], ['Today', 'today!'], ['ListChecks', 'checklist'], ['List', 'list'],
+  ['ViewAgenda', 'view_agenda!'], ['Grid2x2', 'grid_view!'], ['Dashboard', 'space_dashboard!'], ['Notes', 'notes'], ['Inbox', 'inbox!'],
+  ['Mail', 'mail!'], ['Link2', 'link'], ['History', 'history'], ['AddTask', 'add_task'], ['DoneAll', 'done_all'],
+  // Habits / quit / health
+  ['Brain', 'psychology!'], ['HeartPulse', 'monitor_heart!'], ['Zap', 'bolt!'], ['Award', 'workspace_premium!'], ['Trophy', 'trophy!'],
+  ['Stars', 'stars!'], ['Sparkles', 'stars_2!'], ['Celebration', 'celebration!'], ['Savings', 'savings!'], ['IndianRupee', 'currency_rupee'],
+  ['Mood', 'mood!'], ['Spa', 'spa!'], ['SelfImprovement', 'self_improvement'], ['Run', 'directions_run'], ['Water', 'water_drop!'],
+  ['Book', 'menu_book!'], ['Bedtime', 'bedtime!'], ['Moon', 'bedtime!'], ['Smoking', 'smoking_rooms!'], ['SmokeFree', 'smoke_free'],
+  ['NoFood', 'no_food!'], ['Target', 'target'], ['Routine', 'routine!'],
+  // Gym / stats
+  ['MonitorWeight', 'monitor_weight!'], ['TrendingUp', 'trending_up'], ['ShowChart', 'show_chart'], ['Leaderboard', 'leaderboard!'],
+  ['Analytics', 'analytics!'], ['InsertChart', 'insert_chart!'],
+  // Settings / account
+  ['Palette', 'palette!'], ['DarkMode', 'dark_mode!'], ['LightMode', 'light_mode!'], ['Contrast', 'contrast'], ['AccountCircle', 'account_circle!'],
+  ['Backup', 'backup!'], ['DeleteForever', 'delete_forever!'], ['Language', 'language'], ['Tune', 'tune'],
+]
+
+const camel = (s) => s.replace(/[^a-z0-9]+(.)/gi, (_, c) => c.toUpperCase())
+const imports = []
+const lines = []
+for (const [name, spec] of ICONS) {
+  const sym = spec.replace('!', '')
+  const fill = spec.endsWith('!')
+  if (!existsSync(`${DIR}/${sym}.svg`)) throw new Error(`Missing symbol ${sym}`)
+  const v = `s_${camel(sym)}`
+  if (!imports.some((i) => i.v === v)) imports.push({ v, path: `${sym}.svg` })
+  if (fill && !imports.some((i) => i.v === v + 'Fill')) {
+    if (!existsSync(`${DIR}/${sym}-fill.svg`)) throw new Error(`Missing fill ${sym}`)
+    imports.push({ v: v + 'Fill', path: `${sym}-fill.svg` })
+  }
+  lines.push(`export const ${name} = icon('${name}', ${v}${fill ? `, ${v}Fill` : ''})`)
+}
+
+const out = `// GENERATED by scripts/gen-icons.mjs — do not edit by hand. Run \`npm run icons\`.
+// Material Symbols (Rounded, 400). Each icon accepts \`filled\` for the active/selected state.
+import { makeIcon as icon } from './icon-base'
+${imports.map((i) => `import ${i.v} from '@material-symbols/svg-400/rounded/${i.path}?raw'`).join('\n')}
+
+export type { IconComponent, IconProps } from './icon-base'
+
+${lines.join('\n')}
+`
+writeFileSync('src/components/icons.tsx', out)
+console.log(`Wrote ${ICONS.length} icons`)

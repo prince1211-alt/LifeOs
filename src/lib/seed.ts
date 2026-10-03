@@ -96,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   updatedAt: 0,
   deletedAt: null,
   theme: 'system',
+  themeColor: '#0b57d0',
   weekStart: 1,
   timeFormat: '12',
   pomodoro: { focus: 25, short: 5, long: 15, longEvery: 4 },

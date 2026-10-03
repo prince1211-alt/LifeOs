@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './db'
 import { DEFAULT_SETTINGS } from './seed'
@@ -50,4 +51,22 @@ export function useToday(): string {
   const now = useNow(30_000)
   const d = new Date(now)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Opens a page's "create" dialog when the URL has ?new=1 (from the app-wide "New" menu),
+ * then removes the parameter so a refresh doesn't reopen it.
+ */
+export function useNewParam(open: () => void) {
+  const [params, setParams] = useSearchParams()
+  const fn = useRef(open)
+  fn.current = open
+  const isNew = params.get('new') === '1'
+  useEffect(() => {
+    if (!isNew) return
+    fn.current()
+    const next = new URLSearchParams(params)
+    next.delete('new')
+    setParams(next, { replace: true })
+  }, [isNew, params, setParams])
 }

@@ -1,21 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Check, History, Plus, Timer, Trash2, Trophy, X } from 'lucide-react'
+import { ArrowLeft, Check, Dumbbell, History, Plus, Timer, Trash2, Trophy, X } from '@/components/icons'
 import { db } from '@/lib/db'
 import { useNow, useSettings, useTable } from '@/lib/hooks'
 import { save, remove } from '@/lib/repo'
 import { detectPRs, lastSessionSets, workoutVolume } from '@/lib/gym'
 import type { Workout, WorkoutSet } from '@/lib/types'
 import { cn, formatDuration } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Button, IconButton } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input, Textarea } from '@/components/ui/form'
-import { Badge } from '@/components/ui/misc'
+import { Field, Input, Textarea } from '@/components/ui/form'
+import { Badge, EmptyState } from '@/components/ui/misc'
 import { useConfirm } from '@/components/ui/dialog'
 import { ExercisePicker } from './ExercisePicker'
 import { finishWorkout } from './actions'
 import { useRest } from './rest'
+
+/** Set number, weight, reps and the done toggle. */
+const SET_GRID = 'grid grid-cols-[2.5rem_1fr_1fr_2.5rem] items-center gap-3'
 
 function NumberCell({ value, onChange, step, label }: { value: number; onChange: (v: number) => void; step: number; label: string }) {
   const [text, setText] = useState(String(value))
@@ -33,7 +36,7 @@ function NumberCell({ value, onChange, step, label }: { value: number; onChange:
         else setText(String(value))
       }}
       onFocus={(e) => e.target.select()}
-      className="tabular h-9 px-2 text-center"
+      className="tabular h-10 px-2 text-center"
     />
   )
 }
@@ -46,6 +49,7 @@ export function WorkoutPage() {
   const exercises = useTable('exercises') ?? []
   const history = useTable('workouts') ?? []
   const startRest = useRest((s) => s.start)
+  const resting = useRest((s) => Boolean(s.endsAt))
   const now = useNow(1000)
   const [picker, setPicker] = useState(false)
   const { confirm, node } = useConfirm()
@@ -55,12 +59,12 @@ export function WorkoutPage() {
   if (workout === undefined) return null
   if (!workout || workout.deletedAt)
     return (
-      <div className="py-10 text-center">
-        <p>Workout not found.</p>
-        <Button className="mt-3" onClick={() => nav('/gym')}>
-          Back to gym
-        </Button>
-      </div>
+      <EmptyState
+        icon={<Dumbbell />}
+        title="Workout not found"
+        text="It may have been discarded on another device."
+        action={<Button onClick={() => nav('/gym')}>Back to gym</Button>}
+      />
     )
 
   const finished = Boolean(workout.endedAt)
@@ -77,54 +81,56 @@ export function WorkoutPage() {
   const doneSets = workout.entries.reduce((a, e) => a + e.sets.filter((s) => s.done).length, 0)
   const totalSets = workout.entries.reduce((a, e) => a + e.sets.length, 0)
 
+  // While resting, leave room at the bottom so the floating rest timer never covers the last card.
   return (
-    <div className="pb-10">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Input
+    <div className={cn('mx-auto max-w-2xl', resting ? 'pb-44 md:pb-24' : 'pb-6')}>
+      <div className="mb-6">
+        <div className="flex items-center gap-1">
+          <IconButton label="Back to gym" className="-ml-2 shrink-0" onClick={() => nav(finished ? '/gym?tab=history' : '/gym')}>
+            <ArrowLeft />
+          </IconButton>
+          <input
             value={workout.name}
             onChange={(e) => save('workouts', { id: workout.id, name: e.target.value })}
-            className="h-auto border-0 bg-transparent px-0 text-2xl font-bold shadow-none focus-visible:ring-0"
             aria-label="Workout name"
+            className="h-12 min-w-0 flex-1 border-b border-transparent bg-transparent px-2 text-headline-small text-on-surface transition-colors outline-none hover:border-outline-variant focus:border-primary focus:shadow-[inset_0_-1px_0_var(--md-primary)] focus-visible:outline-none md:text-headline-medium"
           />
-          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Timer className="h-4 w-4" />
-              {formatDuration((workout.endedAt ?? now) - workout.startedAt, { seconds: !finished })}
-            </span>
-            <span>
-              {doneSets}/{totalSets} sets
-            </span>
-            <span>{Math.round(workoutVolume(workout)).toLocaleString()} kg volume</span>
-          </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            className="text-destructive"
-            onClick={async () => {
-              if (await confirm(finished ? 'Delete this workout from history?' : 'Discard this workout?')) {
-                await remove('workouts', workout.id)
-                useRest.getState().stop()
-                nav('/gym')
-              }
-            }}
-          >
-            <Trash2 /> {finished ? 'Delete' : 'Discard'}
-          </Button>
-          {!finished && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-3">
+          <Badge variant={finished ? 'default' : 'secondary'} className="tabular">
+            <Timer /> {formatDuration((workout.endedAt ?? now) - workout.startedAt, { seconds: !finished })}
+          </Badge>
+          <Badge className="tabular">
+            {doneSets}/{totalSets} {totalSets === 1 ? 'set' : 'sets'}
+          </Badge>
+          <Badge className="tabular">{Math.round(workoutVolume(workout)).toLocaleString()} kg</Badge>
+          <div className="ml-auto flex items-center gap-2">
             <Button
-              variant="success"
-              disabled={!doneSets}
+              variant="ghost"
+              className="text-error"
               onClick={async () => {
-                await finishWorkout(workout)
-                useRest.getState().stop()
-                nav('/gym?tab=history')
+                if (await confirm(finished ? 'Delete this workout from history?' : 'Discard this workout?')) {
+                  await remove('workouts', workout.id)
+                  useRest.getState().stop()
+                  nav('/gym')
+                }
               }}
             >
-              <Check /> Finish
+              <Trash2 /> {finished ? 'Delete' : 'Discard'}
             </Button>
-          )}
+            {!finished && (
+              <Button
+                disabled={!doneSets}
+                onClick={async () => {
+                  await finishWorkout(workout)
+                  useRest.getState().stop()
+                  nav('/gym?tab=history')
+                }}
+              >
+                <Check /> Finish
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -133,65 +139,79 @@ export function WorkoutPage() {
           const last = lastSessionSets(entry.exerciseId, history, workout.id)
           const best = bests.get(entry.exerciseId)
           return (
-            <Card key={`${entry.exerciseId}-${ei}`} className="p-3">
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div>
-                  <h3 className="font-semibold">{names.get(entry.exerciseId) ?? 'Exercise'}</h3>
-                  <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-                    {last && (
-                      <span className="flex items-center gap-1">
-                        <History className="h-3 w-3" /> Last: {last.map((s) => `${s.weightKg}×${s.reps}`).join(', ')}
-                      </span>
-                    )}
-                    {best && best.weight > 0 && (
-                      <Badge variant="warning">
-                        <Trophy className="h-3 w-3" /> PR {best.weight} kg
-                      </Badge>
-                    )}
-                  </div>
+            <Card key={`${entry.exerciseId}-${ei}`} className="px-4 pt-4 pb-2">
+              <div className="mb-3 flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-title-medium text-on-surface">{names.get(entry.exerciseId) ?? 'Exercise'}</h3>
+                  {(last || (best && best.weight > 0)) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {last && (
+                        <span className="flex items-center gap-1 text-body-small text-on-surface-variant">
+                          <History className="size-4" /> Last: {last.map((s) => `${s.weightKg}×${s.reps}`).join(', ')}
+                        </span>
+                      )}
+                      {best && best.weight > 0 && (
+                        <Badge variant="tertiary">
+                          <Trophy filled /> PR {best.weight} kg
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Remove exercise"
+                <IconButton
+                  label="Remove exercise"
+                  className="-mt-2 -mr-2"
                   onClick={() => update(workout.entries.filter((_, i) => i !== ei))}
                 >
                   <X />
-                </Button>
+                </IconButton>
               </div>
-              <div className="grid grid-cols-[2rem_1fr_1fr_2.75rem] items-center gap-2 text-xs text-muted-foreground">
+              <div className={`${SET_GRID} px-2 pb-1 text-center text-label-medium text-on-surface-variant`}>
                 <span>Set</span>
-                <span className="text-center">kg</span>
-                <span className="text-center">Reps</span>
-                <span />
+                <span>kg</span>
+                <span>Reps</span>
+                <span>Done</span>
               </div>
-              {entry.sets.map((s, si) => {
-                const isPr = s.done && best && s.weightKg > best.weight
-                return (
-                  <div
-                    key={si}
-                    className={cn('mt-1.5 grid grid-cols-[2rem_1fr_1fr_2.75rem] items-center gap-2 rounded-lg', s.done && 'bg-success/10')}
-                  >
-                    <span className="text-center text-sm font-semibold">{isPr ? '🏆' : si + 1}</span>
-                    <NumberCell value={s.weightKg} step={2.5} label="Weight in kg" onChange={(weightKg) => setSet(ei, si, { weightKg })} />
-                    <NumberCell value={s.reps} step={1} label="Reps" onChange={(reps) => setSet(ei, si, { reps: Math.round(reps) })} />
-                    <button
-                      onClick={() => toggleDone(ei, si)}
-                      aria-label={s.done ? 'Untick set' : 'Tick set'}
-                      className={cn(
-                        'flex h-9 w-11 items-center justify-center rounded-md border-2 transition-colors',
-                        s.done ? 'border-success bg-success text-white' : 'border-input hover:border-success',
-                      )}
+              <div className="grid gap-1">
+                {entry.sets.map((s, si) => {
+                  const isPr = s.done && best && s.weightKg > best.weight
+                  return (
+                    <div
+                      key={si}
+                      className={cn(SET_GRID, 'rounded-md px-2 py-1 transition-colors duration-200', s.done && 'bg-success-container/60')}
                     >
-                      <Check className="h-5 w-5" />
-                    </button>
-                  </div>
-                )
-              })}
-              <div className="mt-2 flex gap-2">
+                      <span className="flex justify-center text-title-small text-on-surface-variant tabular">
+                        {isPr ? (
+                          <span className="flex text-tertiary" title="New PR">
+                            <Trophy filled className="size-5" />
+                            <span className="sr-only">Set {si + 1}, new PR</span>
+                          </span>
+                        ) : (
+                          si + 1
+                        )}
+                      </span>
+                      <NumberCell value={s.weightKg} step={2.5} label="Weight in kg" onChange={(weightKg) => setSet(ei, si, { weightKg })} />
+                      <NumberCell value={s.reps} step={1} label="Reps" onChange={(reps) => setSet(ei, si, { reps: Math.round(reps) })} />
+                      <button
+                        type="button"
+                        onClick={() => toggleDone(ei, si)}
+                        aria-label={s.done ? 'Untick set' : 'Tick set'}
+                        aria-pressed={s.done}
+                        className={cn(
+                          'state-layer flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-200',
+                          s.done ? 'bg-success text-on-success' : 'border-2 border-outline text-on-surface-variant/60',
+                        )}
+                      >
+                        <Check className="size-6" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="mt-1 -ml-3 flex gap-1">
                 <Button
-                  size="sm"
                   variant="ghost"
+                  className="px-3"
                   onClick={() => {
                     const prev = entry.sets[entry.sets.length - 1]
                     update(
@@ -205,8 +225,8 @@ export function WorkoutPage() {
                 </Button>
                 {entry.sets.length > 1 && (
                   <Button
-                    size="sm"
                     variant="ghost"
+                    className="px-3"
                     onClick={() => update(workout.entries.map((e, i) => (i === ei ? { ...e, sets: e.sets.slice(0, -1) } : e)))}
                   >
                     Remove set
@@ -216,14 +236,19 @@ export function WorkoutPage() {
             </Card>
           )
         })}
-        <Button variant="outline" onClick={() => setPicker(true)}>
+        {!workout.entries.length && (
+          <p className="px-1 py-4 text-center text-body-medium text-on-surface-variant">No exercises yet. Add one to start logging sets.</p>
+        )}
+        <Button variant="outline" className="w-full" onClick={() => setPicker(true)}>
           <Plus /> Add exercise
         </Button>
-        <Textarea
-          placeholder="Notes (how did it feel?)"
-          defaultValue={workout.notes}
-          onBlur={(e) => e.target.value !== workout.notes && save('workouts', { id: workout.id, notes: e.target.value })}
-        />
+        <Field label="Notes" className="mt-3">
+          <Textarea
+            placeholder="How did it feel?"
+            defaultValue={workout.notes}
+            onBlur={(e) => e.target.value !== workout.notes && save('workouts', { id: workout.id, notes: e.target.value })}
+          />
+        </Field>
       </div>
       <ExercisePicker
         open={picker}

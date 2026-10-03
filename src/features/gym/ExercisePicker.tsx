@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, X } from '@/components/icons'
 import { Dialog } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input, Select } from '@/components/ui/form'
+import { Button, IconButton } from '@/components/ui/button'
+import { Field, Input, Select } from '@/components/ui/form'
+import { Divider, ListItem, SectionTitle } from '@/components/ui/misc'
 import { useTable } from '@/lib/hooks'
 import { save } from '@/lib/repo'
 import type { Exercise } from '@/lib/types'
@@ -15,76 +16,91 @@ export function groupByMuscle(list: Exercise[]) {
   return [...m.entries()].sort((a, b) => MUSCLES.indexOf(a[0]) - MUSCLES.indexOf(b[0]))
 }
 
+/** Name, muscle group and equipment. Stacks in narrow containers (dialogs, phones), one row when there is room. */
 export function AddExerciseForm({ onAdded }: { onAdded?: (e: Exercise) => void }) {
   const [name, setName] = useState('')
   const [muscle, setMuscle] = useState('Chest')
   const [equipment, setEquipment] = useState('')
   return (
-    <form
-      className="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_8rem_8rem_auto]"
-      onSubmit={async (e) => {
-        e.preventDefault()
-        if (!name.trim()) return
-        const ex = await save('exercises', { name: name.trim(), muscleGroup: muscle, equipment: equipment.trim() || 'Other', isCustom: true })
-        setName('')
-        setEquipment('')
-        onAdded?.(ex)
-      }}
-    >
-      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Custom exercise name" />
-      <Select value={muscle} onChange={(e) => setMuscle(e.target.value)} className="max-sm:col-span-1">
-        {MUSCLES.map((m) => (
-          <option key={m}>{m}</option>
-        ))}
-      </Select>
-      <Input value={equipment} onChange={(e) => setEquipment(e.target.value)} placeholder="Equipment" className="max-sm:hidden" />
-      <Button type="submit" disabled={!name.trim()}>
-        <Plus /> Add
-      </Button>
-    </form>
+    <div className="@container">
+      <form
+        className="grid grid-cols-2 items-center gap-x-3 gap-y-4 @2xl:grid-cols-[1fr_10rem_10rem_auto]"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          if (!name.trim()) return
+          const ex = await save('exercises', { name: name.trim(), muscleGroup: muscle, equipment: equipment.trim() || 'Other', isCustom: true })
+          setName('')
+          setEquipment('')
+          onAdded?.(ex)
+        }}
+      >
+        <Field label="Exercise name" className="col-span-2 @2xl:col-span-1">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Bulgarian split squat" />
+        </Field>
+        <Field label="Muscle group">
+          <Select value={muscle} onChange={(e) => setMuscle(e.target.value)}>
+            {MUSCLES.map((m) => (
+              <option key={m}>{m}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Equipment">
+          <Input value={equipment} onChange={(e) => setEquipment(e.target.value)} placeholder="Dumbbell" />
+        </Field>
+        <Button type="submit" variant="secondary" disabled={!name.trim()} className="col-span-2 justify-self-end @2xl:col-span-1">
+          <Plus /> Add
+        </Button>
+      </form>
+    </div>
   )
 }
 
+/** Exercise chooser: Google-style search pill over a list grouped by muscle, with a custom-exercise form below. */
 export function ExercisePicker({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (e: Exercise) => void }) {
   const exercises = useTable('exercises') ?? []
   const [q, setQ] = useState('')
   const list = exercises.filter((e) => e.name.toLowerCase().includes(q.toLowerCase()) || e.muscleGroup.toLowerCase().includes(q.toLowerCase()))
+  const groups = groupByMuscle(list)
+  const pick = (e: Exercise) => {
+    onPick(e)
+    onClose()
+  }
   return (
     <Dialog open={open} onClose={onClose} title="Add exercise">
       <div className="grid gap-3">
-        <div className="relative">
-          <Search className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
-          <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search exercises" className="pl-9" />
-        </div>
-        <div className="grid max-h-[50vh] gap-3 overflow-y-auto">
-          {groupByMuscle(list).map(([muscle, items]) => (
+        <label className="flex h-14 items-center gap-3 rounded-xl bg-surface-container-highest pr-1 pl-4 text-on-surface-variant">
+          <Search className="size-6" />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search exercises"
+            aria-label="Search exercises"
+            className="h-full min-w-0 flex-1 bg-transparent text-body-large text-on-surface outline-none placeholder:text-on-surface-variant focus-visible:outline-none"
+          />
+          {q && (
+            <IconButton label="Clear search" onClick={() => setQ('')}>
+              <X />
+            </IconButton>
+          )}
+        </label>
+        <div className="-mx-6 max-h-[50vh] overflow-y-auto">
+          {groups.map(([muscle, items]) => (
             <section key={muscle}>
-              <h4 className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{muscle}</h4>
-              <div className="grid gap-1">
-                {items.map((e) => (
-                  <button
-                    key={e.id}
-                    onClick={() => {
-                      onPick(e)
-                      onClose()
-                    }}
-                    className="flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-                  >
-                    <span>{e.name}</span>
-                    <span className="text-xs text-muted-foreground">{e.equipment}</span>
-                  </button>
-                ))}
-              </div>
+              <SectionTitle className="px-6 pt-3 pb-1">{muscle}</SectionTitle>
+              {items.map((e) => (
+                <ListItem key={e.id} onClick={() => pick(e)} headline={e.name} trailing={e.equipment} className="min-h-12 px-6" />
+              ))}
             </section>
           ))}
+          {!groups.length && (
+            <p className="px-6 py-6 text-center text-body-medium text-on-surface-variant">No exercises match “{q}”. Add it below.</p>
+          )}
         </div>
-        <div className="border-t pt-3">
-          <AddExerciseForm
-            onAdded={(e) => {
-              onPick(e)
-              onClose()
-            }}
-          />
+        <Divider className="-mx-6" />
+        <div className="grid gap-3 pt-1">
+          <h3 className="text-title-small text-on-surface-variant">Add a custom exercise</h3>
+          <AddExerciseForm onAdded={pick} />
         </div>
       </div>
     </Dialog>

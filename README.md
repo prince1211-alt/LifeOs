@@ -22,9 +22,15 @@ Full spec: [`docs/SPEC.md`](docs/SPEC.md).
 
 A **"Use on this device only"** mode works without any Google setup (data stays in the browser).
 
+## Design
+
+LifeOS follows **Material Design 3**, the design system of Google's own apps: Google Sans Flex, Material Symbols icons,
+Material You dynamic colour (pick a theme colour in Settings), a Gmail/Drive-style navigation drawer with a **New** menu,
+a phone navigation bar, FABs, bottom sheets and snackbars. Rules and components: [`docs/DESIGN.md`](docs/DESIGN.md).
+
 ## Tech stack
 
-React 19 + Vite + TypeScript (strict) · Tailwind CSS v4 with shadcn-style components · React Router · Zustand · Dexie (IndexedDB) ·
+React 19 + Vite + TypeScript (strict) · Tailwind CSS v4 with Material 3 components · Material Symbols · Google Sans Flex · @material/material-color-utilities · React Router · Zustand · Dexie (IndexedDB) ·
 Google Identity Services, Drive v3, Gmail, Calendar · Recharts · date-fns · dnd-kit · vite-plugin-pwa (injectManifest service worker).
 
 ## Getting started

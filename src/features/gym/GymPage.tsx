@@ -1,24 +1,56 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { CalendarDays, Dumbbell, Pencil, Play, Plus, Trash2, Trophy, X } from 'lucide-react'
-import { useSettings, useTable } from '@/lib/hooks'
-import type { BodyLog, Exercise, WorkoutTemplate } from '@/lib/types'
+import { CalendarDays, Dumbbell, MonitorWeight, Pencil, Play, Plus, ShowChart, Timer, Trash2, Trophy, X } from '@/components/icons'
+import { db } from '@/lib/db'
+import { useNewParam, useNow, useSettings, useTable } from '@/lib/hooks'
+import type { BodyLog, Exercise, Workout, WorkoutTemplate } from '@/lib/types'
 import { detectPRs, doneSets, exerciseProgress, workoutVolume } from '@/lib/gym'
 import { remove, save } from '@/lib/repo'
 import { formatDuration, orderedWeekdays, WEEKDAYS_SHORT, ymd } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Button, IconButton } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, useConfirm } from '@/components/ui/dialog'
-import { Field, Input, Segmented, Select } from '@/components/ui/form'
-import { Badge, EmptyState, PageHeader, Stat } from '@/components/ui/misc'
+import { Field, Input, Select, Tabs } from '@/components/ui/form'
+import { Badge, EmptyState, ListItem, PageHeader, SectionTitle, Stat } from '@/components/ui/misc'
 import { AddExerciseForm, ExercisePicker, groupByMuscle } from './ExercisePicker'
 import { startWorkout } from './actions'
 
 type Tab = 'start' | 'history' | 'exercises' | 'progress' | 'body'
+type StartFn = (template?: WorkoutTemplate | 'scheduled') => Promise<void>
 
-const chartStyle = { background: 'var(--card)', border: '1px solid var(--border)', fontSize: 12 }
+/** Recharts styling from the M3 colour roles (see docs/DESIGN.md). */
+const tooltipStyle = { background: 'var(--md-surface-container-high)', border: 'none', borderRadius: 8, color: 'var(--md-on-surface)', fontSize: 12 }
+const axisTick = { fontSize: 11, fill: 'var(--md-on-surface-variant)' }
+
+/** Today's template from the weekly schedule, read straight from the database so it works before live queries load. */
+async function scheduledTemplate(): Promise<WorkoutTemplate | undefined> {
+  const settings = await db.settings.get('settings')
+  const id = settings?.gymSchedule?.[String(new Date().getDay())]
+  const template = id ? await db.workoutTemplates.get(id) : undefined
+  return template && !template.deletedAt ? template : undefined
+}
+
+/** Starts (or resumes) a workout and opens it; repeat taps while one is starting are ignored. */
+function useStartWorkout(): StartFn {
+  const nav = useNavigate()
+  const busy = useRef(false)
+  return async (template) => {
+    if (busy.current) return
+    busy.current = true
+    try {
+      const w = await startWorkout(template === 'scheduled' ? await scheduledTemplate() : template)
+      nav(`/gym/workout/${w.id}`)
+    } finally {
+      busy.current = false
+    }
+  }
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+const TEMPLATE_GRID = 'grid grid-cols-[1fr_4.5rem_4.5rem_2.5rem] items-center gap-2'
 
 function TemplateDialog({ template, open, onClose }: { template: WorkoutTemplate | null; open: boolean; onClose: () => void }) {
   const exercises = useTable('exercises') ?? []
@@ -41,7 +73,7 @@ function TemplateDialog({ template, open, onClose }: { template: WorkoutTemplate
           {template && (
             <Button
               variant="ghost"
-              className="mr-auto text-destructive"
+              className="mr-auto -ml-3 text-error"
               onClick={async () => {
                 await remove('workoutTemplates', template.id)
                 onClose()
@@ -54,6 +86,7 @@ function TemplateDialog({ template, open, onClose }: { template: WorkoutTemplate
             Cancel
           </Button>
           <Button
+            variant="ghost"
             disabled={!d.name?.trim()}
             onClick={async () => {
               await save('workoutTemplates', { ...d, name: d.name!.trim() })
@@ -65,24 +98,47 @@ function TemplateDialog({ template, open, onClose }: { template: WorkoutTemplate
         </>
       }
     >
-      <div className="grid gap-3">
+      <div className="grid gap-5 pt-2">
         <Field label="Name">
           <Input autoFocus value={d.name ?? ''} onChange={(e) => setD({ ...d, name: e.target.value })} placeholder="Upper body" />
         </Field>
-        <div className="grid gap-2">
-          {list.map((x, i) => (
-            <div key={i} className="grid grid-cols-[1fr_4rem_4rem_auto] items-center gap-2">
-              <span className="truncate text-sm font-medium">{names.get(x.exerciseId) ?? 'Exercise'}</span>
-              <Input type="number" min={1} value={x.sets} onChange={(e) => setItem(i, { sets: Number(e.target.value) || 1 })} aria-label="Sets" className="h-8" />
-              <Input type="number" min={1} value={x.reps} onChange={(e) => setItem(i, { reps: Number(e.target.value) || 1 })} aria-label="Reps" className="h-8" />
-              <Button size="icon-sm" variant="ghost" onClick={() => setD({ ...d, exercises: list.filter((_, j) => j !== i) })} aria-label="Remove">
-                <X />
-              </Button>
+        {list.length > 0 ? (
+          <div className="grid gap-2">
+            <div className={`${TEMPLATE_GRID} text-label-medium text-on-surface-variant`}>
+              <span className="px-1">Exercise</span>
+              <span className="text-center">Sets</span>
+              <span className="text-center">Reps</span>
+              <span />
             </div>
-          ))}
-          {list.length > 0 && <p className="text-xs text-muted-foreground">Columns: sets · reps</p>}
-        </div>
-        <Button variant="outline" onClick={() => setPicker(true)}>
+            {list.map((x, i) => (
+              <div key={i} className={TEMPLATE_GRID}>
+                <span className="truncate px-1 text-body-large text-on-surface">{names.get(x.exerciseId) ?? 'Exercise'}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  value={x.sets}
+                  onChange={(e) => setItem(i, { sets: Number(e.target.value) || 1 })}
+                  aria-label="Sets"
+                  className="tabular h-10 px-2 text-center"
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  value={x.reps}
+                  onChange={(e) => setItem(i, { reps: Number(e.target.value) || 1 })}
+                  aria-label="Reps"
+                  className="tabular h-10 px-2 text-center"
+                />
+                <IconButton label="Remove" onClick={() => setD({ ...d, exercises: list.filter((_, j) => j !== i) })}>
+                  <X />
+                </IconButton>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-body-medium text-on-surface-variant">Add the exercises you usually do. Weights prefill from your last session.</p>
+        )}
+        <Button variant="outline" className="w-full" onClick={() => setPicker(true)}>
           <Plus /> Add exercise
         </Button>
       </div>
@@ -95,106 +151,135 @@ function TemplateDialog({ template, open, onClose }: { template: WorkoutTemplate
   )
 }
 
-function StartTab() {
+/** Tonal hero for the workout in progress or today's scheduled template (Google Fit style). */
+function WorkoutHero({ active, scheduled, names, start }: { active?: Workout; scheduled?: WorkoutTemplate; names: Map<string, string>; start: StartFn }) {
+  const nav = useNavigate()
+  const now = useNow(30_000)
+  if (!active && !scheduled) return null
+  const totalSets = active?.entries.reduce((a, e) => a + e.sets.length, 0) ?? 0
+  return (
+    <section className="flex flex-col gap-5 rounded-xl bg-primary-container p-5 text-on-primary-container sm:flex-row sm:items-end sm:justify-between sm:p-6">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-label-large">
+          {active ? <Timer filled className="size-5" /> : <CalendarDays filled className="size-5" />}
+          {active ? 'In progress' : 'Scheduled today'}
+        </div>
+        <h2 className="mt-2 text-headline-small">{active?.name ?? scheduled?.name}</h2>
+        <p className="mt-1 line-clamp-2 text-body-medium text-on-primary-container/80">
+          {active
+            ? `Started ${format(active.startedAt, 'p')} · ${formatDuration(now - active.startedAt)} · ${doneSets(active)}/${plural(totalSets, 'set')}`
+            : scheduled?.exercises.map((e) => names.get(e.exerciseId)).filter(Boolean).join(' · ') || 'No exercises in this template yet'}
+        </p>
+      </div>
+      {active ? (
+        <Button className="hidden shrink-0 md:inline-flex" onClick={() => nav(`/gym/workout/${active.id}`)}>
+          <Play filled /> Resume
+        </Button>
+      ) : (
+        <Button className="hidden shrink-0 md:inline-flex" onClick={() => start(scheduled)}>
+          <Play filled /> Start
+        </Button>
+      )}
+    </section>
+  )
+}
+
+function StartTab({ start }: { start: StartFn }) {
   const templates = useTable('workoutTemplates') ?? []
   const workouts = useTable('workouts') ?? []
   const exercises = useTable('exercises') ?? []
   const settings = useSettings()
-  const nav = useNavigate()
   const [editing, setEditing] = useState<WorkoutTemplate | null>(null)
   const [creating, setCreating] = useState(false)
   const active = workouts.find((w) => !w.endedAt)
   const names = new Map(exercises.map((e) => [e.id, e.name]))
   const todayTpl = templates.find((t) => t.id === settings.gymSchedule[String(new Date().getDay())])
 
-  const go = async (t?: WorkoutTemplate) => {
-    const w = await startWorkout(t)
-    nav(`/gym/workout/${w.id}`)
-  }
-
   return (
-    <div className="grid gap-4">
-      {active ? (
-        <Card className="border-primary/50 bg-primary/5 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="font-semibold">{active.name} in progress</div>
-              <div className="text-sm text-muted-foreground">Started {format(active.startedAt, 'p')}</div>
-            </div>
-            <Button onClick={() => nav(`/gym/workout/${active.id}`)}>
-              <Play /> Resume
-            </Button>
-          </div>
-        </Card>
-      ) : todayTpl ? (
-        <Card className="border-primary/50 bg-primary/5 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-medium text-primary">Scheduled today</div>
-              <div className="font-semibold">{todayTpl.name}</div>
-            </div>
-            <Button onClick={() => go(todayTpl)}>
-              <Play /> Start
-            </Button>
-          </div>
-        </Card>
-      ) : null}
+    <div className="grid gap-6">
+      <WorkoutHero active={active} scheduled={todayTpl} names={names} start={start} />
 
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Templates</h2>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => go()} disabled={Boolean(active)}>
-            Empty workout
-          </Button>
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus /> Template
-          </Button>
-        </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {templates.map((t) => (
-          <Card key={t.id} className="flex flex-col p-4">
-            <div className="mb-2 flex items-start justify-between">
-              <h3 className="font-semibold">{t.name}</h3>
-              <Button size="icon-sm" variant="ghost" onClick={() => setEditing(t)} aria-label="Edit template">
-                <Pencil />
-              </Button>
-            </div>
-            <ul className="mb-3 flex-1 text-sm text-muted-foreground">
-              {t.exercises.map((e, i) => (
-                <li key={i}>
-                  {names.get(e.exerciseId) ?? '—'} · {e.sets}×{e.reps}
-                </li>
-              ))}
-            </ul>
-            <Button onClick={() => go(t)} disabled={Boolean(active)}>
-              <Play /> Start
+      <section>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <SectionTitle className="py-0">Templates</SectionTitle>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => start()} disabled={Boolean(active)}>
+              <Play /> Empty workout
             </Button>
-          </Card>
-        ))}
-      </div>
+            <Button variant="secondary" onClick={() => setCreating(true)}>
+              <Plus /> Template
+            </Button>
+          </div>
+        </div>
+        {templates.length ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {templates.map((t) => (
+              <Card key={t.id} className="flex flex-col p-4">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-title-medium">{t.name}</h3>
+                    <p className="text-body-small text-on-surface-variant">
+                      {plural(t.exercises.length, 'exercise')} · {plural(t.exercises.reduce((a, e) => a + e.sets, 0), 'set')}
+                    </p>
+                  </div>
+                  <IconButton label="Edit template" className="-mt-2 -mr-2" onClick={() => setEditing(t)}>
+                    <Pencil />
+                  </IconButton>
+                </div>
+                <ul className="mt-3 grid flex-1 content-start gap-1 text-body-medium text-on-surface-variant">
+                  {t.exercises.map((e, i) => (
+                    <li key={i} className="flex justify-between gap-3">
+                      <span className="truncate">{names.get(e.exerciseId) ?? '—'}</span>
+                      <span className="tabular shrink-0">
+                        {e.sets} × {e.reps}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <Button variant="secondary" className="mt-4 self-start" onClick={() => start(t)} disabled={Boolean(active)}>
+                  <Play filled /> Start
+                </Button>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg bg-surface-container-low">
+            <EmptyState
+              icon={<Dumbbell />}
+              title="No templates yet"
+              text="Save your usual routine as a template to start it in one tap."
+              className="py-8"
+            />
+          </div>
+        )}
+      </section>
+
       <ScheduleCard templates={templates} />
       <TemplateDialog open={creating || Boolean(editing)} template={editing} onClose={() => (setCreating(false), setEditing(null))} />
     </div>
   )
 }
 
-/** Later: weekly gym schedule that shows on the Today screen. */
+/** Weekly gym schedule that shows on the Today screen. */
 function ScheduleCard({ templates }: { templates: WorkoutTemplate[] }) {
   const settings = useSettings()
+  const today = new Date().getDay()
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="block">
         <CardTitle>
-          <CalendarDays className="h-4 w-4" /> Weekly schedule
+          <CalendarDays /> Weekly schedule
         </CardTitle>
+        <p className="mt-0.5 text-body-small text-on-surface-variant">Scheduled workouts show up on Today.</p>
       </CardHeader>
-      <CardContent className="grid gap-2 sm:grid-cols-7">
+      <CardContent className="grid gap-2 pt-2 sm:grid-cols-2 lg:grid-cols-7">
         {orderedWeekdays(settings.weekStart).map((d) => (
-          <label key={d} className="grid gap-1 text-xs font-medium">
-            {WEEKDAYS_SHORT[d]}
+          <label key={d} className="flex items-center gap-3 lg:flex-col lg:items-stretch lg:gap-1.5">
+            <span className={`w-10 shrink-0 text-label-large lg:w-auto lg:text-center ${d === today ? 'text-primary' : 'text-on-surface-variant'}`}>
+              {WEEKDAYS_SHORT[d]}
+            </span>
             <Select
-              className="h-9 px-2 text-xs"
+              className="h-10 flex-1 [&>select]:pl-3 [&>select]:text-body-medium lg:[&>select]:pr-8"
               value={settings.gymSchedule[String(d)] ?? ''}
               onChange={(e) => {
                 const gymSchedule = { ...settings.gymSchedule }
@@ -217,6 +302,10 @@ function ScheduleCard({ templates }: { templates: WorkoutTemplate[] }) {
   )
 }
 
+function prLabel(kind: 'weight' | '1rm' | 'reps') {
+  return kind === 'reps' ? ' reps' : kind === '1rm' ? ' kg e1RM' : ' kg'
+}
+
 function HistoryTab() {
   const workouts = useTable('workouts') ?? []
   const exercises = useTable('exercises') ?? []
@@ -225,37 +314,55 @@ function HistoryTab() {
   const done = workouts.filter((w) => w.endedAt).sort((a, b) => b.startedAt - a.startedAt)
   const { prs } = useMemo(() => detectPRs(workouts), [workouts])
   if (!done.length) return <EmptyState icon={<Dumbbell />} title="No workouts yet" text="Finish a workout and it shows up here." />
+  const months = new Map<string, Workout[]>()
+  for (const w of done) {
+    const key = format(w.startedAt, 'MMMM yyyy')
+    months.set(key, [...(months.get(key) ?? []), w])
+  }
   return (
-    <div className="grid gap-2">
-      {done.map((w) => {
-        const mine = prs.filter((p) => p.workoutId === w.id)
-        return (
-          <Card key={w.id} className="cursor-pointer p-4 transition-colors hover:bg-muted/30" onClick={() => nav(`/gym/workout/${w.id}`)}>
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <div className="font-semibold">{w.name}</div>
-                <div className="text-xs text-muted-foreground">{format(w.startedAt, 'EEE d MMM yyyy, p')}</div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <Badge>{formatDuration((w.endedAt ?? w.startedAt) - w.startedAt)}</Badge>
-                <Badge>{Math.round(workoutVolume(w)).toLocaleString()} kg</Badge>
-                <Badge>{doneSets(w)} sets</Badge>
-              </div>
-            </div>
-            <div className="mt-2 text-sm text-muted-foreground">{w.entries.map((e) => names.get(e.exerciseId)).filter(Boolean).join(' · ')}</div>
-            {mine.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {mine.map((p) => (
-                  <Badge key={p.exerciseId + p.kind} variant="warning">
-                    <Trophy className="h-3 w-3" /> {names.get(p.exerciseId)} {p.value}
-                    {p.kind === 'reps' ? ' reps' : p.kind === '1rm' ? ' kg e1RM' : ' kg'}
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </Card>
-        )
-      })}
+    <div className="grid gap-4">
+      {[...months.entries()].map(([month, list]) => (
+        <section key={month}>
+          <SectionTitle>{month}</SectionTitle>
+          <div className="grid gap-0.5 overflow-hidden rounded-lg">
+            {list.map((w) => {
+              const mine = prs.filter((p) => p.workoutId === w.id)
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  onClick={() => nav(`/gym/workout/${w.id}`)}
+                  className="state-layer flex w-full items-start gap-4 bg-surface-container-low px-4 py-3 text-left"
+                >
+                  <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-full bg-secondary-container text-on-secondary-container">
+                    <span className="text-label-small">{format(w.startedAt, 'EEE')}</span>
+                    <span className="-mt-0.5 text-title-medium tabular">{format(w.startedAt, 'd')}</span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-title-medium text-on-surface">{w.name}</span>
+                    <span className="block truncate text-body-medium text-on-surface-variant">
+                      {[format(w.startedAt, 'p'), ...w.entries.map((e) => names.get(e.exerciseId)).filter(Boolean)].join(' · ')}
+                    </span>
+                    <span className="mt-2 flex flex-wrap gap-1.5">
+                      <Badge>
+                        <Timer /> {formatDuration((w.endedAt ?? w.startedAt) - w.startedAt)}
+                      </Badge>
+                      <Badge className="tabular">{Math.round(workoutVolume(w)).toLocaleString()} kg</Badge>
+                      <Badge className="tabular">{plural(doneSets(w), 'set')}</Badge>
+                      {mine.map((p) => (
+                        <Badge key={p.exerciseId + p.kind} variant="tertiary">
+                          <Trophy filled /> {names.get(p.exerciseId)} {p.value}
+                          {prLabel(p.kind)}
+                        </Badge>
+                      ))}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   )
 }
@@ -265,29 +372,35 @@ function ExercisesTab() {
   const { confirm, node } = useConfirm()
   return (
     <div className="grid gap-4">
-      <Card className="p-4">
-        <h3 className="mb-2 text-sm font-semibold">Add a custom exercise</h3>
-        <AddExerciseForm />
+      <Card>
+        <CardHeader>
+          <CardTitle>Add a custom exercise</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-2">
+          <AddExerciseForm />
+        </CardContent>
       </Card>
       {groupByMuscle(exercises).map(([muscle, items]) => (
         <section key={muscle}>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{muscle}</h3>
-          <div className="grid gap-1.5 sm:grid-cols-2">
+          <SectionTitle>{muscle}</SectionTitle>
+          <div className="grid gap-0.5 overflow-hidden rounded-lg md:grid-cols-2">
             {items.map((e: Exercise) => (
-              <div key={e.id} className="flex items-center justify-between rounded-lg border bg-card px-3 py-2 text-sm">
-                <span>
-                  {e.name} <span className="text-xs text-muted-foreground">· {e.equipment}</span>
-                  {e.isCustom && <Badge className="ml-1.5">custom</Badge>}
-                </span>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Delete exercise"
-                  onClick={async () => (await confirm(`Delete ${e.name}?`)) && remove('exercises', e.id)}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
+              <ListItem
+                key={e.id}
+                className="bg-surface-container-low pr-2"
+                headline={
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{e.name}</span>
+                    {e.isCustom && <Badge variant="secondary">Custom</Badge>}
+                  </span>
+                }
+                supporting={e.equipment}
+                trailing={
+                  <IconButton label="Delete exercise" onClick={async () => (await confirm(`Delete ${e.name}?`)) && remove('exercises', e.id)}>
+                    <Trash2 />
+                  </IconButton>
+                }
+              />
             ))}
           </div>
         </section>
@@ -297,7 +410,7 @@ function ExercisesTab() {
   )
 }
 
-/** Later: progress chart per exercise (best weight over time). */
+/** Progress chart per exercise (best weight over time). */
 function ProgressTab() {
   const workouts = useTable('workouts') ?? []
   const exercises = useTable('exercises') ?? []
@@ -307,16 +420,18 @@ function ProgressTab() {
   const data = exerciseProgress(id, workouts).map((p) => ({ ...p, date: format(p.at, 'd MMM') }))
   const { bests } = useMemo(() => detectPRs(workouts), [workouts])
   const best = bests.get(id)
-  if (!used.length) return <EmptyState icon={<Dumbbell />} title="No progress yet" text="Log a few workouts to see your strength over time." />
+  if (!used.length) return <EmptyState icon={<ShowChart />} title="No progress yet" text="Log a few workouts to see your strength over time." />
   return (
     <div className="grid gap-4">
-      <Select value={id} onChange={(e) => setSel(e.target.value)} className="max-w-xs">
-        {used.map((e) => (
-          <option key={e.id} value={e.id}>
-            {e.name}
-          </option>
-        ))}
-      </Select>
+      <Field label="Exercise" className="max-w-sm">
+        <Select value={id} onChange={(e) => setSel(e.target.value)}>
+          {used.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
       {best && (
         <div className="grid grid-cols-3 gap-2">
           <Stat label="Best weight" value={`${best.weight} kg`} />
@@ -324,25 +439,55 @@ function ProgressTab() {
           <Stat label="Best reps" value={best.reps} />
         </div>
       )}
-      <Card className="h-64 p-3">
-        <ResponsiveContainer>
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" />
-            <YAxis tick={{ fontSize: 10 }} width={32} stroke="var(--muted-foreground)" />
-            <Tooltip contentStyle={chartStyle} />
-            <Line type="monotone" dataKey="weight" name="Best weight (kg)" stroke="var(--primary)" strokeWidth={2} dot />
-            <Line type="monotone" dataKey="oneRm" name="Est. 1RM (kg)" stroke="#f97316" strokeWidth={2} dot={false} strokeDasharray="4 3" />
-          </LineChart>
-        </ResponsiveContainer>
+      <Card>
+        <CardHeader className="flex-wrap">
+          <CardTitle>Strength over time</CardTitle>
+          <div className="flex items-center gap-4 text-label-medium text-on-surface-variant">
+            <span className="flex items-center gap-1.5">
+              <span className="h-[3px] w-4 rounded-full bg-primary" /> Best weight
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 border-t-2 border-dashed border-tertiary" /> Est. 1RM
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="h-64 px-2">
+          <ResponsiveContainer>
+            <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+              <CartesianGrid vertical={false} stroke="var(--md-outline-variant)" />
+              <XAxis dataKey="date" tick={axisTick} axisLine={false} tickLine={false} />
+              <YAxis tick={axisTick} width={36} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--md-on-surface-variant)' }} cursor={{ stroke: 'var(--md-outline-variant)' }} />
+              <Line
+                type="monotone"
+                dataKey="weight"
+                name="Best weight (kg)"
+                stroke="var(--md-primary)"
+                strokeWidth={3}
+                dot={{ r: 3, fill: 'var(--md-primary)', strokeWidth: 0 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="oneRm"
+                name="Est. 1RM (kg)"
+                stroke="var(--md-tertiary)"
+                strokeWidth={2}
+                dot={false}
+                strokeDasharray="4 3"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
       </Card>
     </div>
   )
 }
 
 const MEASURES = ['waist', 'chest', 'arms', 'hips', 'thighs']
+const capital = (s: string) => s[0].toUpperCase() + s.slice(1)
 
-/** Later: body weight and measurements log with chart. */
+/** Body weight and measurements log with chart. */
 function BodyTab() {
   const logs = (useTable('bodyLogs') ?? []).sort((a, b) => a.date.localeCompare(b.date))
   const [date, setDate] = useState(ymd())
@@ -359,59 +504,93 @@ function BodyTab() {
     await save('bodyLogs', { id: existing?.id, date, weightKg: weight ? Number(weight) : null, measurements })
   }
   const data = logs.filter((l) => l.weightKg).map((l) => ({ date: format(new Date(l.date + 'T12:00'), 'd MMM'), weight: l.weightKg }))
+  const latest = data[data.length - 1]
   return (
     <div className="grid gap-4">
-      <Card className="p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Date">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value || ymd())} />
-          </Field>
-          <Field label="Weight (kg)">
-            <Input inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="70.5" />
-          </Field>
-          {MEASURES.map((k) => (
-            <Field key={k} label={`${k[0].toUpperCase() + k.slice(1)} (cm)`}>
-              <Input inputMode="decimal" value={m[k] ?? ''} onChange={(e) => setM({ ...m, [k]: e.target.value })} />
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <MonitorWeight /> Log body stats
+          </CardTitle>
+          {existing && <Badge variant="secondary">Editing this day</Badge>}
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-5 pt-2 sm:grid-cols-4">
+            <Field label="Date">
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value || ymd())} />
             </Field>
-          ))}
-        </div>
-        <Button className="mt-3" onClick={submit}>
-          {existing ? 'Update entry' : 'Save entry'}
-        </Button>
+            <Field label="Weight (kg)">
+              <Input inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="70.5" />
+            </Field>
+            {MEASURES.map((k) => (
+              <Field key={k} label={`${capital(k)} (cm)`}>
+                <Input inputMode="decimal" value={m[k] ?? ''} onChange={(e) => setM({ ...m, [k]: e.target.value })} />
+              </Field>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button onClick={submit}>{existing ? 'Update entry' : 'Save entry'}</Button>
+          </div>
+        </CardContent>
       </Card>
       {data.length > 0 ? (
-        <Card className="h-64 p-3">
-          <ResponsiveContainer>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" />
-              <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fontSize: 10 }} width={32} stroke="var(--muted-foreground)" />
-              <Tooltip contentStyle={chartStyle} />
-              <Line type="monotone" dataKey="weight" name="Weight (kg)" stroke="var(--primary)" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
+        <Card>
+          <CardHeader>
+            <CardTitle>Weight</CardTitle>
+            {latest && <span className="tabular text-title-large text-on-surface">{latest.weight} kg</span>}
+          </CardHeader>
+          <CardContent className="h-64 px-2">
+            <ResponsiveContainer>
+              <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid vertical={false} stroke="var(--md-outline-variant)" />
+                <XAxis dataKey="date" tick={axisTick} axisLine={false} tickLine={false} />
+                <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={axisTick} width={36} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--md-on-surface-variant)' }} cursor={{ stroke: 'var(--md-outline-variant)' }} />
+                <Line
+                  type="monotone"
+                  dataKey="weight"
+                  name="Weight (kg)"
+                  stroke="var(--md-primary)"
+                  strokeWidth={3}
+                  dot={{ r: 3, fill: 'var(--md-primary)', strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
         </Card>
       ) : (
-        <EmptyState title="No body logs yet" text="Log your weight to see the trend." />
+        <EmptyState icon={<MonitorWeight />} title="No body logs yet" text="Log your weight to see the trend." />
       )}
-      <div className="grid gap-1.5">
-        {[...logs].reverse().slice(0, 30).map((l) => (
-          <div key={l.id} className="flex items-center justify-between rounded-lg border bg-card px-3 py-2 text-sm">
-            <span className="font-medium">{format(new Date(l.date + 'T12:00'), 'd MMM yyyy')}</span>
-            <span className="flex items-center gap-3 text-muted-foreground">
-              {l.weightKg != null && <span>{l.weightKg} kg</span>}
-              {Object.entries(l.measurements).map(([k, v]) => (
-                <span key={k} className="hidden sm:inline">
-                  {k} {v}
-                </span>
-              ))}
-              <button aria-label="Delete entry" className="hover:text-destructive" onClick={() => remove('bodyLogs', l.id)}>
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </span>
+      {logs.length > 0 && (
+        <section>
+          <SectionTitle>Entries</SectionTitle>
+          <div className="grid gap-0.5 overflow-hidden rounded-lg">
+            {[...logs].reverse().slice(0, 30).map((l) => (
+              <ListItem
+                key={l.id}
+                className="bg-surface-container-low pr-2"
+                headline={format(new Date(l.date + 'T12:00'), 'EEE, d MMM yyyy')}
+                supporting={
+                  Object.keys(l.measurements).length
+                    ? Object.entries(l.measurements)
+                        .map(([k, v]) => `${capital(k)} ${v}`)
+                        .join(' · ')
+                    : undefined
+                }
+                trailing={
+                  <>
+                    {l.weightKg != null && <span className="tabular text-title-small text-on-surface">{l.weightKg} kg</span>}
+                    <IconButton label="Delete entry" onClick={() => remove('bodyLogs', l.id)}>
+                      <Trash2 />
+                    </IconButton>
+                  </>
+                }
+              />
+            ))}
           </div>
-        ))}
-      </div>
+        </section>
+      )}
     </div>
   )
 }
@@ -420,17 +599,21 @@ export function GymPage() {
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Tab) || 'start'
   const workouts = useTable('workouts') ?? []
+  const start = useStartWorkout()
+  const active = workouts.some((w) => !w.endedAt)
+  useNewParam(() => start('scheduled'))
   const week = workouts.filter((w) => w.endedAt && w.startedAt > Date.now() - 7 * 86_400_000)
   return (
     <div>
       <PageHeader
         title="Gym"
         subtitle={`${week.length} workout${week.length === 1 ? '' : 's'} this week · ${Math.round(week.reduce((a, w) => a + workoutVolume(w), 0)).toLocaleString()} kg`}
+        fab={{ icon: <Play filled />, label: active ? 'Resume workout' : 'Start workout', onClick: () => start('scheduled') }}
       />
-      <Segmented
+      <Tabs
         value={tab}
         onChange={(t) => setParams({ tab: t }, { replace: true })}
-        className="mb-4 w-full overflow-x-auto sm:w-auto"
+        className="-mx-4 mb-5 md:mx-0"
         options={[
           { value: 'start', label: 'Workout' },
           { value: 'history', label: 'History' },
@@ -439,7 +622,7 @@ export function GymPage() {
           { value: 'exercises', label: 'Exercises' },
         ]}
       />
-      {tab === 'start' && <StartTab />}
+      {tab === 'start' && <StartTab start={start} />}
       {tab === 'history' && <HistoryTab />}
       {tab === 'progress' && <ProgressTab />}
       {tab === 'body' && <BodyTab />}

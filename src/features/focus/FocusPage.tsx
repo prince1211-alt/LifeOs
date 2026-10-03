@@ -1,37 +1,71 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { addDays, format, startOfWeek } from 'date-fns'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { CalendarPlus, ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Plus, RotateCcw, SkipForward, Square, Timer, Trash2 } from 'lucide-react'
+import {
+  CalendarDays,
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  GripVertical,
+  Maximize2,
+  Minimize2,
+  Pause,
+  Play,
+  Plus,
+  RotateCcw,
+  SkipForward,
+  Spa,
+  Square,
+  Timer,
+  Trash2,
+} from '@/components/icons'
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { useNow, useSettings, useTable } from '@/lib/hooks'
+import { useMediaQuery, useNewParam, useNow, useSettings, useTable } from '@/lib/hooks'
 import type { FocusSession, Task, TimeBlock } from '@/lib/types'
 import { remove, save } from '@/lib/repo'
 import { clock, cn, formatTime, minutesOf, parseYmd, timeFromMinutes, ymd } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Button, IconButton } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
-import { Field, Input, Segmented, Select } from '@/components/ui/form'
-import { Badge, EmptyState, PageHeader, ProgressRing, Stat } from '@/components/ui/misc'
+import { Field, Input, Segmented, Select, Tabs } from '@/components/ui/form'
+import { Badge, EmptyState, ListItem, PageHeader, Progress, ProgressRing, SectionTitle, Stat } from '@/components/ui/misc'
 import { PHASE_LABEL, syncIdleLength, usePomodoro } from './pomodoro'
 import { useDndSensors } from '@/components/dnd'
 import { blockToEvent, upsertEvent } from '@/lib/google/calendar'
 import { useApp, toast } from '@/store/app'
 
 type Tab = 'timer' | 'planner' | 'log' | 'review'
-const chartStyle = { background: 'var(--card)', border: '1px solid var(--border)', fontSize: 12 }
-const CAT_COLORS = ['#6366f1', '#22c55e', '#f97316', '#ec4899', '#14b8a6', '#eab308', '#a855f7', '#ef4444']
+
+const tooltipStyle = {
+  background: 'var(--md-surface-container-high)',
+  border: 'none',
+  borderRadius: 8,
+  color: 'var(--md-on-surface)',
+  fontSize: 12,
+}
+const axisTick = { fontSize: 11, fill: 'var(--md-on-surface-variant)' }
+const legendText = (value: string) => <span style={{ color: 'var(--md-on-surface-variant)' }}>{value}</span>
+
+/** Category data colours (Google Calendar event palette). */
+const CAT_COLORS = ['#3f51b5', '#33b679', '#f4511e', '#e67c73', '#039be5', '#f6bf26', '#8e24aa', '#d50000']
 export const catColor = (cats: string[], c: string) => CAT_COLORS[Math.max(0, cats.indexOf(c)) % CAT_COLORS.length]
+/** A data colour mixed into a surface, for tinted containers that stay legible in light and dark. */
+const tint = (color: string, pct: number, surface = 'var(--md-surface-container-low)') => `color-mix(in srgb, ${color} ${pct}%, ${surface})`
 
 function PomodoroTimer() {
   const p = usePomodoro()
   const settings = useSettings()
   const tasks = (useTable('tasks') ?? []).filter((t) => t.status === 'open')
   const now = useNow(250)
+  const wide = useMediaQuery('(min-width: 640px)')
   const [full, setFull] = useState(false)
   const left = p.running && p.endsAt ? Math.max(0, p.endsAt - now) : p.remainingMs
   const task = tasks.find((t) => t.id === p.taskId)
-  const color = p.phase === 'focus' ? 'var(--primary)' : 'var(--success)'
+  const color = p.phase === 'focus' ? 'var(--md-primary)' : 'var(--md-tertiary)'
+  const longEvery = settings.pomodoro.longEvery
+  const done = p.phase === 'long' ? longEvery : p.round % longEvery
+  const playLabel = p.running ? 'Pause' : p.startedAt ? 'Resume' : 'Start'
 
   useEffect(() => {
     syncIdleLength()
@@ -42,7 +76,6 @@ function PomodoroTimer() {
   }, [p.running, left, p.phase])
   useEffect(() => () => void (document.title = 'LifeOS'), [])
 
-  // Later: full-screen focus mode.
   const toggleFull = async () => {
     const next = !full
     setFull(next)
@@ -59,101 +92,114 @@ function PomodoroTimer() {
     return () => document.removeEventListener('fullscreenchange', onFs)
   }, [])
 
+  // Google Clock style: tonal side buttons around a big play/pause button that morphs from circle to squircle.
   const controls = (
-    <div className="flex items-center justify-center gap-2">
-      <Button size="icon" variant="ghost" onClick={() => p.reset()} aria-label="Reset">
-        <RotateCcw />
-      </Button>
-      {p.running ? (
-        <Button size="lg" className="w-36" onClick={p.pause}>
-          <Pause /> Pause
-        </Button>
-      ) : (
-        <Button size="lg" className="w-36" onClick={p.start}>
-          <Play /> {p.startedAt ? 'Resume' : 'Start'}
-        </Button>
-      )}
-      <Button size="icon" variant="ghost" onClick={() => p.skip()} aria-label="Skip phase" title="Skip to next phase">
-        <SkipForward />
-      </Button>
-      {p.startedAt && (
-        <Button size="icon" variant="ghost" onClick={() => p.stopAndLog()} aria-label="Stop and log" title="Stop and log time so far">
-          <Square />
-        </Button>
-      )}
+    <div className="flex flex-col items-center gap-3">
+      <div className="grid w-full max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-4">
+        <div className="flex items-center justify-end">
+          <IconButton label="Reset" variant="secondary" size="icon-lg" onClick={() => p.reset()}>
+            <RotateCcw />
+          </IconButton>
+        </div>
+        <button
+          type="button"
+          title={playLabel}
+          onClick={() => (p.running ? p.pause() : p.start())}
+          className={cn(
+            'state-layer flex h-24 w-24 items-center justify-center bg-primary-container text-on-primary-container shadow-elevation-1 transition-[border-radius,box-shadow] duration-300 ease-standard hover:shadow-elevation-2 [&_svg]:size-10',
+            p.running ? 'rounded-xl' : 'rounded-[48px]',
+          )}
+        >
+          {p.running ? <Pause filled /> : <Play filled />}
+          <span className="sr-only">{playLabel}</span>
+        </button>
+        <div className="flex items-center justify-start">
+          <IconButton label="Skip phase" title="Skip to next phase" variant="secondary" size="icon-lg" onClick={() => p.skip()}>
+            <SkipForward />
+          </IconButton>
+        </div>
+      </div>
+      <div className="flex h-10 items-center">
+        {p.startedAt && (
+          <Button variant="ghost" title="Stop and log time so far" onClick={() => p.stopAndLog()}>
+            <Square filled /> Stop and log
+          </Button>
+        )}
+      </div>
     </div>
   )
 
   const dots = (
-    <div className="flex justify-center gap-1.5">
-      {Array.from({ length: settings.pomodoro.longEvery }, (_, i) => (
-        <span key={i} className={cn('h-2 w-2 rounded-full', i < p.round % settings.pomodoro.longEvery || (p.phase === 'long' && i < settings.pomodoro.longEvery) ? 'bg-primary' : 'bg-muted')} />
+    <div className="flex justify-center gap-2" role="img" aria-label={`${done} of ${longEvery} focus rounds done`}>
+      {Array.from({ length: longEvery }, (_, i) => (
+        <span key={i} className={cn('h-2.5 w-2.5 rounded-full transition-colors', i < done ? 'bg-primary' : 'bg-outline-variant')} />
       ))}
     </div>
   )
 
   if (full)
     return (
-      <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-8 bg-background p-6">
-        <Button size="icon" variant="ghost" className="absolute top-4 right-4" onClick={toggleFull} aria-label="Exit focus mode">
-          <Minimize2 />
-        </Button>
-        <div className="text-lg font-medium text-muted-foreground">{PHASE_LABEL[p.phase]}</div>
-        <div className="tabular text-8xl font-bold tracking-tight sm:text-9xl" style={{ color }}>
+      <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-8 bg-surface p-6 text-on-surface">
+        <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-4">
+          <IconButton label="Exit focus mode" onClick={toggleFull}>
+            <Minimize2 />
+          </IconButton>
+        </div>
+        <div className="text-title-large text-on-surface-variant">{PHASE_LABEL[p.phase]}</div>
+        <div className="tabular text-display-large" style={{ color, fontSize: 'clamp(72px, 22vw, 176px)', lineHeight: 1 }}>
           {clock(left)}
         </div>
-        {task && <div className="max-w-xl text-center text-xl">{task.title}</div>}
+        {task && <div className="max-w-xl text-center text-headline-small">{task.title}</div>}
         {dots}
         {controls}
       </div>
     )
 
   return (
-    <Card className="p-6">
-      <div className="flex flex-col items-center gap-4">
-        <Segmented
-          value={p.phase}
-          onChange={async (phase) => {
-            if (p.running) return
-            usePomodoro.setState({ phase, startedAt: null })
-            await p.reset()
-          }}
-          options={[
-            { value: 'focus', label: 'Focus' },
-            { value: 'short', label: 'Short break' },
-            { value: 'long', label: 'Long break' },
-          ]}
-        />
-        <ProgressRing value={1 - left / p.phaseMs} size={240} stroke={14} color={color}>
-          <div className="tabular text-5xl font-bold">{clock(left)}</div>
-          <div className="text-sm text-muted-foreground">{PHASE_LABEL[p.phase]}</div>
-        </ProgressRing>
-        {dots}
-        {controls}
-        <div className="grid w-full max-w-md grid-cols-2 gap-3">
-          <Field label="Working on">
-            <Select value={p.taskId ?? ''} onChange={(e) => p.setTask(e.target.value || null)}>
-              <option value="">No task</option>
-              {tasks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Category">
-            <Select value={p.category} onChange={(e) => p.setCategory(e.target.value)}>
-              {settings.categories.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <Button variant="outline" size="sm" onClick={toggleFull}>
-          <Maximize2 /> Full-screen focus mode
-        </Button>
+    <div className="flex flex-col items-center gap-6">
+      <Segmented
+        value={p.phase}
+        onChange={async (phase) => {
+          if (p.running) return
+          usePomodoro.setState({ phase, startedAt: null })
+          await p.reset()
+        }}
+        options={[
+          { value: 'focus', label: 'Focus' },
+          { value: 'short', label: 'Short break' },
+          { value: 'long', label: 'Long break' },
+        ]}
+      />
+      <ProgressRing value={1 - left / p.phaseMs} size={wide ? 320 : 272} stroke={wide ? 12 : 10} color={color}>
+        <div className="text-label-large text-on-surface-variant">{PHASE_LABEL[p.phase]}</div>
+        <div className="tabular text-display-medium text-on-surface sm:text-display-large">{clock(left)}</div>
+        {task && <div className="mt-1 max-w-[70%] truncate text-body-medium text-on-surface-variant">{task.title}</div>}
+      </ProgressRing>
+      {dots}
+      {controls}
+      <div className="grid w-full max-w-md gap-5 pt-2 sm:grid-cols-2">
+        <Field label="Working on">
+          <Select value={p.taskId ?? ''} onChange={(e) => p.setTask(e.target.value || null)}>
+            <option value="">No task</option>
+            {tasks.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Category">
+          <Select value={p.category} onChange={(e) => p.setCategory(e.target.value)}>
+            {settings.categories.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </Select>
+        </Field>
       </div>
-    </Card>
+      <Button variant="ghost" onClick={toggleFull}>
+        <Maximize2 /> Full-screen focus mode
+      </Button>
+    </div>
   )
 }
 
@@ -165,9 +211,13 @@ function DraggableTask({ task }: { task: Task }) {
       {...attributes}
       {...listeners}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={cn('cursor-grab touch-none rounded-lg border bg-card px-3 py-2 text-sm shadow-sm active:cursor-grabbing', isDragging && 'z-30 opacity-80 shadow-lg')}
+      className={cn(
+        'flex h-10 max-w-full cursor-grab touch-none items-center gap-1.5 rounded-sm bg-surface-container-low pr-3 pl-1.5 text-on-surface shadow-elevation-1 active:cursor-grabbing md:w-full',
+        isDragging && 'relative z-30 shadow-elevation-3',
+      )}
     >
-      {task.title}
+      <GripVertical className="size-5 shrink-0 text-on-surface-variant" />
+      <span className="truncate text-label-large">{task.title}</span>
     </div>
   )
 }
@@ -176,12 +226,21 @@ function HourSlot({ hour, children, onAdd }: { hour: number; children: React.Rea
   const { setNodeRef, isOver } = useDroppable({ id: `hour:${hour}` })
   const settings = useSettings()
   return (
-    <div ref={setNodeRef} className={cn('flex min-h-12 gap-2 border-t py-1', isOver && 'bg-primary/10')}>
-      <div className="w-14 shrink-0 pt-1 text-right text-xs text-muted-foreground">{formatTime(timeFromMinutes(hour * 60), settings.timeFormat)}</div>
-      <div className="flex flex-1 flex-col gap-1">
+    <div
+      ref={setNodeRef}
+      className={cn('flex min-h-14 gap-3 border-t border-outline-variant py-1 transition-colors first:border-t-0', isOver && 'rounded-sm bg-primary/10')}
+    >
+      <div className="tabular w-16 shrink-0 pt-1.5 text-right text-label-medium text-on-surface-variant">
+        {formatTime(timeFromMinutes(hour * 60), settings.timeFormat)}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         {children}
-        <button onClick={onAdd} className="h-6 rounded text-left text-xs text-transparent hover:bg-muted hover:text-muted-foreground">
-          + add block
+        <button
+          type="button"
+          onClick={onAdd}
+          className="state-layer flex h-8 items-center gap-1 rounded-sm px-2 text-label-medium text-transparent hover:text-on-surface-variant focus-visible:text-on-surface-variant [&_svg]:size-4"
+        >
+          <Plus /> Add block
         </button>
       </div>
     </div>
@@ -204,7 +263,7 @@ function BlockDialog({ block, open, onClose, date }: { block: Partial<TimeBlock>
           {d.id && (
             <Button
               variant="ghost"
-              className="mr-auto text-destructive"
+              className="mr-auto -ml-3 text-error"
               onClick={async () => {
                 await remove('timeBlocks', d.id!)
                 onClose()
@@ -217,6 +276,7 @@ function BlockDialog({ block, open, onClose, date }: { block: Partial<TimeBlock>
             Cancel
           </Button>
           <Button
+            variant="ghost"
             disabled={!d.title?.trim() || !d.start || !d.end || d.end <= d.start}
             onClick={async () => {
               await save('timeBlocks', { ...d, date: d.date ?? date, title: d.title!.trim() })
@@ -228,7 +288,7 @@ function BlockDialog({ block, open, onClose, date }: { block: Partial<TimeBlock>
         </>
       }
     >
-      <div className="grid gap-3">
+      <div className="grid gap-5">
         <Field label="Title">
           <Input autoFocus value={d.title ?? ''} onChange={(e) => setD({ ...d, title: e.target.value })} />
         </Field>
@@ -252,8 +312,60 @@ function BlockDialog({ block, open, onClose, date }: { block: Partial<TimeBlock>
   )
 }
 
-/** Time-blocking day planner: drag tasks into hourly slots. */
-function Planner() {
+function dayTitle(date: string) {
+  const d = parseYmd(date)
+  const today = new Date()
+  const relative = { [ymd(today)]: 'Today', [ymd(addDays(today, 1))]: 'Tomorrow', [ymd(addDays(today, -1))]: 'Yesterday' }[date]
+  const day = format(d, d.getFullYear() === today.getFullYear() ? 'd MMM' : 'd MMM yyyy')
+  return `${relative ?? format(d, 'EEE')}, ${day}`
+}
+
+/** Google Calendar style day switcher: Today, previous/next, the date as a title and a calendar button for the native picker. */
+function DayNav({ date, onChange }: { date: string; onChange: (date: string) => void }) {
+  const picker = useRef<HTMLInputElement>(null)
+  const openPicker = () => {
+    const el = picker.current
+    if (!el) return
+    try {
+      el.showPicker()
+    } catch {
+      el.focus()
+    }
+  }
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <Button variant="outline" className="mr-1 px-4" onClick={() => onChange(ymd())}>
+        Today
+      </Button>
+      <IconButton label="Previous day" onClick={() => onChange(ymd(addDays(parseYmd(date), -1)))}>
+        <ChevronLeft />
+      </IconButton>
+      <IconButton label="Next day" onClick={() => onChange(ymd(addDays(parseYmd(date), 1)))}>
+        <ChevronRight />
+      </IconButton>
+      <h2 className="tabular ml-1 min-w-0 truncate text-title-medium text-on-surface" aria-live="polite">
+        {dayTitle(date)}
+      </h2>
+      <div className="relative shrink-0">
+        <IconButton label="Choose date" onClick={openPicker}>
+          <CalendarDays />
+        </IconButton>
+        <input
+          ref={picker}
+          type="date"
+          value={date}
+          onChange={(e) => onChange(e.target.value || ymd())}
+          aria-label="Date"
+          tabIndex={-1}
+          className="pointer-events-none absolute inset-0 size-full opacity-0"
+        />
+      </div>
+    </div>
+  )
+}
+
+/** Time-blocking day planner: drag tasks into hourly slots. `newBlock` changes when the page FAB asks for a new block. */
+function Planner({ newBlock }: { newBlock: number }) {
   const settings = useSettings()
   const user = useApp((s) => s.user)
   const [date, setDate] = useState(ymd())
@@ -264,6 +376,20 @@ function Planner() {
   const scheduledIds = new Set(blocks.map((b) => b.taskId))
   const candidates = tasks.filter((t) => t.status === 'open' && (!t.dueDate || t.dueDate <= date) && !scheduledIds.has(t.id))
   const hours = Array.from({ length: 18 }, (_, i) => i + 6) // 6:00 – 23:00
+  const draft = (hour: number): Partial<TimeBlock> => ({
+    date,
+    start: timeFromMinutes(hour * 60),
+    end: timeFromMinutes(Math.min(hour * 60 + 60, 24 * 60 - 1)),
+    title: '',
+    category: 'Work',
+  })
+
+  const handledNew = useRef(newBlock)
+  useEffect(() => {
+    if (newBlock === handledNew.current) return
+    handledNew.current = newBlock
+    setEditing(draft(Math.min(23, new Date().getHours() + 1)))
+  }, [newBlock])
 
   const onDragEnd = async (e: DragEndEvent) => {
     if (!e.over) return
@@ -304,45 +430,31 @@ function Planner() {
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" onClick={() => setDate(ymd(addDays(parseYmd(date), -1)))} aria-label="Previous day">
-            <ChevronLeft />
-          </Button>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value || ymd())} className="h-9 w-40" />
-          <Button size="icon" variant="ghost" onClick={() => setDate(ymd(addDays(parseYmd(date), 1)))} aria-label="Next day">
-            <ChevronRight />
-          </Button>
-          {date !== ymd() && (
-            <Button size="sm" variant="ghost" onClick={() => setDate(ymd())}>
-              Today
-            </Button>
-          )}
-        </div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <DayNav date={date} onChange={setDate} />
         {user?.mode === 'google' && settings.calendarMirror && blocks.length > 0 && (
-          <Button size="sm" variant="outline" onClick={pushToCalendar}>
+          <Button variant="secondary" onClick={pushToCalendar}>
             <CalendarPlus /> Push to Google Calendar
           </Button>
         )}
       </div>
-      <div className="grid gap-4 md:grid-cols-[14rem_1fr]">
+      <div className="grid gap-4 md:grid-cols-[15rem_minmax(0,1fr)] md:items-start md:gap-6">
         <div>
-          <h3 className="mb-2 text-sm font-semibold">Tasks to place</h3>
-          <div className="grid gap-1.5">
-            {candidates.map((t) => (
-              <DraggableTask key={t.id} task={t} />
-            ))}
-            {!candidates.length && <p className="text-xs text-muted-foreground">No unscheduled tasks for this day.</p>}
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">Drag a task into an hour. Tap a block to edit its time.</p>
+          <SectionTitle>Tasks to place</SectionTitle>
+          {candidates.length ? (
+            <div className="flex flex-wrap gap-2 md:flex-col">
+              {candidates.map((t) => (
+                <DraggableTask key={t.id} task={t} />
+              ))}
+            </div>
+          ) : (
+            <p className="px-1 text-body-medium text-on-surface-variant">No unscheduled tasks for this day.</p>
+          )}
+          <p className="mt-3 px-1 text-body-small text-on-surface-variant">Drag a task into an hour. Tap a block to edit its time.</p>
         </div>
-        <Card className="p-2">
+        <Card className="px-2 py-1 md:px-3">
           {hours.map((h) => (
-            <HourSlot
-              key={h}
-              hour={h}
-              onAdd={() => setEditing({ date, start: timeFromMinutes(h * 60), end: timeFromMinutes(h * 60 + 60), title: '', category: 'Work' })}
-            >
+            <HourSlot key={h} hour={h} onAdd={() => setEditing(draft(h))}>
               {blocks
                 .filter((b) => Math.floor(minutesOf(b.start) / 60) === h)
                 .map((b) => (
@@ -364,15 +476,18 @@ function BlockChip({ block, onOpen, color }: { block: TimeBlock; onOpen: () => v
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), borderLeftColor: color, minHeight: Math.max(28, (len / 60) * 44) }}
-      className={cn('flex touch-none items-start justify-between gap-2 rounded-md border border-l-4 bg-muted/60 px-2 py-1 text-sm', isDragging && 'z-30 opacity-80 shadow-lg')}
+      style={{ transform: CSS.Translate.toString(transform), background: tint(color, 18), minHeight: Math.max(32, (len / 60) * 48) }}
+      className={cn('state-layer flex touch-none items-stretch gap-2.5 rounded-sm py-1.5 pr-2 pl-1.5 text-on-surface', isDragging && 'z-30 shadow-elevation-3')}
       {...attributes}
       {...listeners}
       onClick={onOpen}
     >
-      <span className="font-medium">{block.title}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">
-        {formatTime(block.start, settings.timeFormat)}–{formatTime(block.end, settings.timeFormat)}
+      <span className="w-1 shrink-0 rounded-full" style={{ background: color }} />
+      <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-2">
+        <span className="truncate text-title-small">{block.title}</span>
+        <span className="tabular shrink-0 text-label-medium text-on-surface-variant">
+          {formatTime(block.start, settings.timeFormat)}–{formatTime(block.end, settings.timeFormat)}
+        </span>
       </span>
     </div>
   )
@@ -394,95 +509,124 @@ function TimeLog() {
     for (const s of focus) if (s.startedAt >= from) m.set(s.category, (m.get(s.category) ?? 0) + s.durationMin)
     return [...m.entries()].sort((a, b) => b[1] - a[1])
   }
-  const todayTotals = totals(parseYmd(today).getTime())
-  const weekTotals = totals(ws)
+  const summaries: [string, [string, number][]][] = [
+    ['Today', totals(parseYmd(today).getTime())],
+    ['This week', totals(ws)],
+  ]
   const recent = [...sessions].sort((a, b) => b.startedAt - a.startedAt).slice(0, 30)
   const taskName = new Map(tasks.map((t) => [t.id, t.title]))
 
   return (
-    <div className="grid gap-4">
-      <Card className="p-4">
-        <h3 className="mb-2 text-sm font-semibold">Log time manually</h3>
-        <form
-          className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_6rem_10rem_auto]"
-          onSubmit={async (e) => {
-            e.preventDefault()
-            const n = Number(mins)
-            if (!n) return
-            const start = parseYmd(date)
-            start.setHours(12)
-            await save('focusSessions', { category: cat, durationMin: n, startedAt: start.getTime(), type: 'focus', manual: true, taskId: null })
-            toast(`Logged ${n} min of ${cat}`)
-          }}
-        >
-          <Select value={cat} onChange={(e) => setCat(e.target.value)}>
-            {settings.categories.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </Select>
-          <Input type="number" min={1} value={mins} onChange={(e) => setMins(e.target.value)} aria-label="Minutes" />
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value || ymd())} />
-          <Button type="submit">
-            <Plus /> Log
-          </Button>
-        </form>
-      </Card>
-      <div className="grid gap-4 md:grid-cols-2">
-        {[
-          ['Today', todayTotals],
-          ['This week', weekTotals],
-        ].map(([label, rows]) => (
-          <Card key={label as string}>
-            <CardHeader>
-              <CardTitle>{label as string}</CardTitle>
-              <Badge>{Math.round(((rows as [string, number][]).reduce((a, r) => a + r[1], 0) / 60) * 10) / 10} h</Badge>
-            </CardHeader>
-            <CardContent className="grid gap-2">
-              {(rows as [string, number][]).map(([c, m]) => {
-                const max = Math.max(...(rows as [string, number][]).map((r) => r[1]))
-                return (
-                  <div key={c} className="grid grid-cols-[5rem_1fr_3.5rem] items-center gap-2 text-sm">
-                    <span className="truncate">{c}</span>
-                    <div className="h-2 rounded-full bg-muted">
-                      <div className="h-2 rounded-full" style={{ width: `${(m / max) * 100}%`, background: catColor(settings.categories, c) }} />
-                    </div>
-                    <span className="tabular text-right text-xs text-muted-foreground">{m} min</span>
-                  </div>
-                )
-              })}
-              {!(rows as unknown[]).length && <p className="text-sm text-muted-foreground">Nothing logged yet.</p>}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+    <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Recent sessions</CardTitle>
+          <CardTitle>Log time manually</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-1.5">
-          {recent.map((s: FocusSession) => (
-            <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-1.5 text-sm">
-              <span>
-                <span className="font-medium">{s.category}</span>
-                {s.taskId && taskName.get(s.taskId) && <span className="text-muted-foreground"> · {taskName.get(s.taskId)}</span>}
-                {s.manual && <Badge className="ml-1.5">manual</Badge>}
-              </span>
-              <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                {format(s.startedAt, 'd MMM, p')} · {s.durationMin} min
-                <button aria-label="Delete session" className="hover:text-destructive" onClick={() => remove('focusSessions', s.id)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </span>
-            </div>
-          ))}
-          {!recent.length && <EmptyState icon={<Timer />} title="No sessions yet" text="Start a Pomodoro or log time manually." />}
+        <CardContent>
+          <form
+            className="grid grid-cols-2 items-center gap-4 pt-2 sm:grid-cols-[1fr_7rem_11rem_auto]"
+            onSubmit={async (e) => {
+              e.preventDefault()
+              const n = Number(mins)
+              if (!n) return
+              const start = parseYmd(date)
+              start.setHours(12)
+              await save('focusSessions', { category: cat, durationMin: n, startedAt: start.getTime(), type: 'focus', manual: true, taskId: null })
+              toast(`Logged ${n} min of ${cat}`)
+            }}
+          >
+            <Field label="Category">
+              <Select value={cat} onChange={(e) => setCat(e.target.value)}>
+                {settings.categories.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Minutes">
+              <Input type="number" min={1} value={mins} onChange={(e) => setMins(e.target.value)} aria-label="Minutes" />
+            </Field>
+            <Field label="Date">
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value || ymd())} aria-label="Date" />
+            </Field>
+            <Button type="submit" className="justify-self-start">
+              <Plus /> Log
+            </Button>
+          </form>
         </CardContent>
       </Card>
+      <div className="grid gap-4 md:grid-cols-2">
+        {summaries.map(([label, rows]) => {
+          const total = rows.reduce((a, r) => a + r[1], 0)
+          const max = Math.max(...rows.map((r) => r[1]))
+          return (
+            <Card key={label}>
+              <CardHeader>
+                <CardTitle>{label}</CardTitle>
+                <Badge variant="secondary">{Math.round((total / 60) * 10) / 10} h</Badge>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                {rows.map(([c, m]) => (
+                  <div key={c} className="grid grid-cols-[6rem_1fr_4rem] items-center gap-3">
+                    <span className="flex min-w-0 items-center gap-2 text-body-medium">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: catColor(settings.categories, c) }} />
+                      <span className="truncate">{c}</span>
+                    </span>
+                    <Progress value={m / max} color={catColor(settings.categories, c)} className="h-2" />
+                    <span className="tabular text-right text-label-medium text-on-surface-variant">{m} min</span>
+                  </div>
+                ))}
+                {!rows.length && <p className="text-body-medium text-on-surface-variant">Nothing logged yet.</p>}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+      <section>
+        <SectionTitle>Recent sessions</SectionTitle>
+        {recent.length ? (
+          <div className="flex flex-col gap-0.5 overflow-hidden rounded-lg">
+            {recent.map((s: FocusSession) => (
+              <ListItem
+                key={s.id}
+                className="bg-surface-container-low"
+                leading={
+                  <span
+                    className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface"
+                    style={{
+                      background:
+                        s.type === 'focus' ? tint(catColor(settings.categories, s.category), 24) : 'var(--md-surface-container-highest)',
+                    }}
+                  >
+                    {s.type === 'focus' ? <Timer /> : <Spa />}
+                  </span>
+                }
+                headline={
+                  <>
+                    {s.category}
+                    {s.taskId && taskName.get(s.taskId) && <span className="text-on-surface-variant"> · {taskName.get(s.taskId)}</span>}
+                  </>
+                }
+                supporting={`${format(s.startedAt, 'd MMM, p')} · ${s.durationMin} min`}
+                trailing={
+                  <>
+                    {s.manual && <Badge>Manual</Badge>}
+                    <IconButton label="Delete session" className="-mr-2" onClick={() => remove('focusSessions', s.id)}>
+                      <Trash2 />
+                    </IconButton>
+                  </>
+                }
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon={<Timer />} title="No sessions yet" text="Start a Pomodoro or log time manually." />
+        )}
+      </section>
     </div>
   )
 }
 
-/** Later: weekly review (planned vs actual) and daily/weekly time reports. */
+/** Weekly review (planned vs actual) and daily focus report. */
 function Review() {
   const settings = useSettings()
   const sessions = (useTable('focusSessions') ?? []).filter((s) => s.type === 'focus')
@@ -510,58 +654,64 @@ function Review() {
   })
   const planned = byCat.reduce((a, r) => a + r.planned, 0)
   const actual = byCat.reduce((a, r) => a + r.actual, 0)
+  const cursor = { fill: 'var(--md-on-surface)', fillOpacity: 0.08 }
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center gap-2">
-        <Button size="icon" variant="ghost" onClick={() => setOffset(offset - 1)} aria-label="Previous week">
+      <div className="flex items-center gap-1">
+        <IconButton label="Previous week" onClick={() => setOffset(offset - 1)}>
           <ChevronLeft />
-        </Button>
-        <span className="text-sm font-medium">
+        </IconButton>
+        <span className="min-w-36 text-center text-title-medium">
           {format(ws, 'd MMM')} – {format(addDays(we, -1), 'd MMM')}
         </span>
-        <Button size="icon" variant="ghost" onClick={() => setOffset(offset + 1)} disabled={offset >= 0} aria-label="Next week">
+        <IconButton label="Next week" onClick={() => setOffset(offset + 1)} disabled={offset >= 0}>
           <ChevronRight />
-        </Button>
+        </IconButton>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-3">
         <Stat label="Planned" value={`${Math.round(planned * 10) / 10} h`} />
         <Stat label="Actual focus" value={`${Math.round(actual * 10) / 10} h`} />
         <Stat label="Follow-through" value={planned ? `${Math.round((actual / planned) * 100)}%` : '—'} />
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Planned vs actual by category (hours)</CardTitle>
+          <CardTitle>Planned vs actual by category</CardTitle>
+          <span className="text-label-medium text-on-surface-variant">Hours</span>
         </CardHeader>
         <CardContent className="h-64">
           {byCat.length ? (
             <ResponsiveContainer>
-              <BarChart data={byCat}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="category" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-                <YAxis tick={{ fontSize: 10 }} width={28} stroke="var(--muted-foreground)" />
-                <Tooltip contentStyle={chartStyle} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="planned" name="Planned" fill="var(--muted-foreground)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="actual" name="Actual" fill="var(--primary)" radius={[3, 3, 0, 0]} />
+              <BarChart data={byCat} barGap={4}>
+                <CartesianGrid vertical={false} stroke="var(--md-outline-variant)" />
+                <XAxis dataKey="category" tick={axisTick} axisLine={false} tickLine={false} />
+                <YAxis tick={axisTick} width={28} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--md-on-surface)' }} itemStyle={{ color: 'var(--md-on-surface)' }} cursor={cursor} />
+                <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} formatter={legendText} />
+                <Bar dataKey="planned" name="Planned" fill="var(--md-tertiary)" radius={[6, 6, 0, 0]} maxBarSize={32} />
+                <Bar dataKey="actual" name="Actual" fill="var(--md-primary)" radius={[6, 6, 0, 0]} maxBarSize={32} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-muted-foreground">Plan time blocks and run focus sessions to compare.</p>
+            <p className="flex h-full items-center justify-center text-center text-body-medium text-on-surface-variant">
+              Plan time blocks and run focus sessions to compare.
+            </p>
           )}
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Daily focus (minutes)</CardTitle>
+          <CardTitle>Daily focus</CardTitle>
+          <span className="text-label-medium text-on-surface-variant">Minutes</span>
         </CardHeader>
         <CardContent className="h-48">
           <ResponsiveContainer>
             <BarChart data={daily}>
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-              <YAxis tick={{ fontSize: 10 }} width={28} stroke="var(--muted-foreground)" />
-              <Tooltip contentStyle={chartStyle} />
-              <Bar dataKey="minutes" name="Focus min" fill="var(--primary)" radius={[3, 3, 0, 0]} />
+              <CartesianGrid vertical={false} stroke="var(--md-outline-variant)" />
+              <XAxis dataKey="day" tick={axisTick} axisLine={false} tickLine={false} />
+              <YAxis tick={axisTick} width={28} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--md-on-surface)' }} itemStyle={{ color: 'var(--md-on-surface)' }} cursor={cursor} />
+              <Bar dataKey="minutes" name="Focus min" fill="var(--md-primary)" radius={[6, 6, 0, 0]} maxBarSize={32} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -572,16 +722,22 @@ function Review() {
 
 export function FocusPage() {
   const [tab, setTab] = useState<Tab>('timer')
+  const [newBlock, setNewBlock] = useState(0)
+  useNewParam(() => setTab('timer'))
   const sessions = useTable('focusSessions') ?? []
   const today = ymd()
   const todayMin = sessions.filter((s) => s.type === 'focus' && ymd(s.startedAt) === today).reduce((a, s) => a + s.durationMin, 0)
   return (
     <div>
-      <PageHeader title="Focus & time" subtitle={`${todayMin} focus minutes today`} />
-      <Segmented
+      <PageHeader
+        title="Focus & time"
+        subtitle={`${todayMin} focus minutes today`}
+        fab={tab === 'planner' ? { icon: <Plus />, label: 'New block', onClick: () => setNewBlock((n) => n + 1) } : undefined}
+      />
+      <Tabs
         value={tab}
         onChange={setTab}
-        className="mb-4 w-full overflow-x-auto sm:w-auto"
+        className="-mx-4 mb-6 md:mx-0"
         options={[
           { value: 'timer', label: 'Pomodoro' },
           { value: 'planner', label: 'Day planner' },
@@ -590,7 +746,7 @@ export function FocusPage() {
         ]}
       />
       {tab === 'timer' && <PomodoroTimer />}
-      {tab === 'planner' && <Planner />}
+      {tab === 'planner' && <Planner newBlock={newBlock} />}
       {tab === 'log' && <TimeLog />}
       {tab === 'review' && <Review />}
     </div>

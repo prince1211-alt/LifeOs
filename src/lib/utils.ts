@@ -1,6 +1,16 @@
 import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { extendTailwindMerge } from 'tailwind-merge'
 import { format } from 'date-fns'
+
+// The M3 type-scale utilities (text-title-medium…) are font sizes, not colours,
+// so they must not override (or be overridden by) text-on-surface and friends.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      'font-size': [{ text: [(v: string) => /^(display|headline|title|body|label)-(large|medium|small)$/.test(v)] }],
+    },
+  },
+})
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

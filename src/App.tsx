@@ -58,13 +58,13 @@ function useBootstrap() {
 function ThemeSync() {
   const s = useSettings()
   useEffect(() => {
-    applyTheme(s.theme)
+    applyTheme(s.theme, s.themeColor)
     if (s.theme !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const on = () => applyTheme('system')
+    const on = () => applyTheme('system', s.themeColor)
     mq.addEventListener('change', on)
     return () => mq.removeEventListener('change', on)
-  }, [s.theme])
+  }, [s.theme, s.themeColor])
   return null
 }
 

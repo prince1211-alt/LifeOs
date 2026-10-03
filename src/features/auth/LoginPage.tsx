@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlarmClock, CheckSquare, Cloud, Dumbbell, Flame, HardDrive, ShieldOff, Timer } from 'lucide-react'
+import { AlarmClock, CheckSquare, Cloud, Dumbbell, Flame, HardDrive, Loader2, ShieldOff, Timer, TriangleAlert } from '@/components/icons'
+import { LogoMark } from '@/components/layout/AppShell'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Divider } from '@/components/ui/misc'
 import { isConfigured, signIn } from '@/lib/google/auth'
 import { fullSync } from '@/lib/sync'
 import { db } from '@/lib/db'
@@ -63,52 +64,67 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/15 via-background to-background p-4">
-      <Card className="w-full max-w-md p-8">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
-            <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth={2.5}>
-              <circle cx="12" cy="12" r="8" />
-              <path d="M12 8v4l2.5 2.5" strokeLinecap="round" />
-            </svg>
+    <div className="flex min-h-dvh flex-col bg-surface sm:items-center sm:justify-center sm:p-6">
+      <main className="flex w-full flex-1 flex-col px-6 pt-12 pb-8 sm:max-w-[480px] sm:flex-none sm:rounded-xl sm:bg-surface-container-low sm:p-10 md:max-w-[1040px]">
+        <div className="grid gap-10 md:grid-cols-2 md:gap-12">
+          <div>
+            <LogoMark size={48} />
+            <h1 className="mt-6 text-headline-large text-on-surface md:text-display-small">LifeOS</h1>
+            <p className="mt-2 text-body-large text-on-surface-variant">Your whole day in one place.</p>
+            <ul className="mt-8 grid grid-cols-3 gap-2" aria-label="What's inside">
+              {FEATURES.map(({ icon: Icon, label }) => (
+                <li key={label} className="flex flex-col items-center gap-2 rounded-md bg-surface-container px-2 py-4 text-label-large text-on-surface">
+                  <Icon className="size-6 text-primary" />
+                  {label}
+                </li>
+              ))}
+            </ul>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">LifeOS</h1>
-          <p className="mt-1 text-muted-foreground">Your whole day in one place.</p>
-        </div>
-        <div className="mb-6 grid grid-cols-3 gap-2">
-          {FEATURES.map(({ icon: Icon, label }) => (
-            <div key={label} className="flex flex-col items-center gap-1 rounded-xl bg-muted/60 py-3 text-xs font-medium">
-              <Icon className="h-5 w-5 text-primary" />
-              {label}
-            </div>
-          ))}
-        </div>
-        <div className="grid gap-3">
-          <Button size="lg" variant="outline" className="h-12" onClick={google} disabled={busy || !configured}>
-            <GoogleLogo /> {busy ? 'Signing in…' : 'Sign in with Google'}
-          </Button>
-          {!configured && (
-            <p className="text-center text-xs text-muted-foreground">
-              Google sign-in needs <code>VITE_GOOGLE_CLIENT_ID</code> in <code>.env</code> (see README).
+
+          <div className="flex flex-col md:justify-center">
+            <h2 className="text-headline-small text-on-surface">Sign in</h2>
+            <p className="mt-2 text-body-medium text-on-surface-variant">
+              Use your Google Account to back up and sync across devices, or keep everything on this device.
             </p>
-          )}
-          {error && <p className="text-center text-sm text-destructive">{error}</p>}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <div className="h-px flex-1 bg-border" /> or <div className="h-px flex-1 bg-border" />
+            <div className="mt-8 grid gap-3">
+              <Button
+                variant="outline"
+                className="h-12 w-full gap-3 border-outline bg-surface-container-lowest text-on-surface [&_svg]:size-5"
+                onClick={google}
+                disabled={busy || !configured}
+              >
+                {busy ? <Loader2 className="animate-spin text-primary" /> : <GoogleLogo />}
+                {busy ? 'Signing in…' : 'Sign in with Google'}
+              </Button>
+              {!configured && (
+                <p className="px-2 text-center text-body-small text-on-surface-variant">
+                  Google sign-in needs <code>VITE_GOOGLE_CLIENT_ID</code> in <code>.env</code> (see README).
+                </p>
+              )}
+              {error && (
+                <div role="alert" className="flex items-start gap-3 rounded-md bg-error-container px-4 py-3 text-body-medium text-on-error-container">
+                  <TriangleAlert className="size-5 shrink-0" />
+                  {error}
+                </div>
+              )}
+              <div className="flex items-center gap-4 py-1 text-label-medium text-on-surface-variant">
+                <Divider className="flex-1" /> or <Divider className="flex-1" />
+              </div>
+              <Button variant="ghost" className="w-full" onClick={local} disabled={busy}>
+                <HardDrive /> Use on this device only
+              </Button>
+            </div>
+            <ul className="mt-8 grid gap-3 text-body-small text-on-surface-variant">
+              <li className="flex gap-3">
+                <Cloud className="size-4 shrink-0" /> Data is saved in a hidden app folder in your own Google Drive — no LifeOS server.
+              </li>
+              <li className="flex gap-3">
+                <HardDrive className="size-4 shrink-0" /> Works offline; changes sync in the background.
+              </li>
+            </ul>
           </div>
-          <Button variant="ghost" onClick={local} disabled={busy}>
-            <HardDrive /> Use on this device only
-          </Button>
         </div>
-        <ul className="mt-6 grid gap-2 text-xs text-muted-foreground">
-          <li className="flex gap-2">
-            <Cloud className="h-4 w-4 shrink-0" /> Data is saved in a hidden app folder in your own Google Drive — no LifeOS server.
-          </li>
-          <li className="flex gap-2">
-            <HardDrive className="h-4 w-4 shrink-0" /> Works offline; changes sync in the background.
-          </li>
-        </ul>
-      </Card>
+      </main>
     </div>
   )
 }

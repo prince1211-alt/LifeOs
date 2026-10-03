@@ -159,6 +159,8 @@ export interface TimeBlock extends SyncFields {
 
 export interface Settings extends SyncFields {
   theme: 'light' | 'dark' | 'system'
+  /** Material You seed colour (hex) */
+  themeColor: string
   weekStart: 0 | 1
   timeFormat: '12' | '24'
   pomodoro: { focus: number; short: number; long: number; longEvery: number }
