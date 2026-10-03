@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { addDays, differenceInCalendarDays, format, startOfMonth, startOfWeek, endOfMonth } from 'date-fns'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { CheckSquare, ChevronLeft, ChevronRight, Dumbbell, Flame, ShieldOff, Timer } from 'lucide-react'
+import { CheckSquare, ChevronLeft, ChevronRight, Dumbbell, Flame, ShieldOff, Timer } from '@/components/icons'
 import { useNow, useSettings, useTable } from '@/lib/hooks'
 import { habitLogId, isDone, isDueOn } from '@/lib/habits'
 import { bestStreakMs, quitStats } from '@/lib/quit'

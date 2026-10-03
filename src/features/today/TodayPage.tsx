@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { format, formatDistanceToNowStrict } from 'date-fns'
-import { AlarmClock, ArrowRight, CheckSquare, Dumbbell, Flame, Moon, Pause, Play, ShieldOff, Star, Timer } from 'lucide-react'
+import { AlarmClock, ArrowRight, CheckSquare, Dumbbell, Flame, Moon, Pause, Play, ShieldOff, Star, Timer } from '@/components/icons'
 import { useNow, useSettings, useTable, useToday } from '@/lib/hooks'
 import type { Task } from '@/lib/types'
 import { habitLogId, isDone, isDueOn, computeStreak } from '@/lib/habits'

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { AlarmClock, Bell, BellRing, Brain, Play, Plus, Trash2, TrendingUp, Volume2 } from 'lucide-react'
+import { AlarmClock, Bell, BellRing, Brain, Play, Plus, Trash2, TrendingUp, Volume2 } from '@/components/icons'
 import { useNow, useSettings, useTable } from '@/lib/hooks'
 import type { Alarm } from '@/lib/types'
 import { cn, formatTime } from '@/lib/utils'

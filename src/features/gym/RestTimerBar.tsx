@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Timer, X } from 'lucide-react'
+import { Timer, X } from '@/components/icons'
 import { useRest } from './rest'
 import { useNow } from '@/lib/hooks'
 import { clock } from '@/lib/utils'

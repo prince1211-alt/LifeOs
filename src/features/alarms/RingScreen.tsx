@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { AlarmClock, BellOff, Moon } from 'lucide-react'
+import { AlarmClock, BellOff, Moon } from '@/components/icons'
 import { useApp } from '@/store/app'
 import { useNow, useSettings } from '@/lib/hooks'
 import { dismiss, snooze } from './AlarmEngine'

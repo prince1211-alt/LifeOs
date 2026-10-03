@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, format, startOfWeek } from 'date-fns'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { CalendarPlus, ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Plus, RotateCcw, SkipForward, Square, Timer, Trash2 } from 'lucide-react'
+import { CalendarPlus, ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Plus, RotateCcw, SkipForward, Square, Timer, Trash2 } from '@/components/icons'
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { useNow, useSettings, useTable } from '@/lib/hooks'

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlarmClock, CheckSquare, Cloud, Dumbbell, Flame, HardDrive, ShieldOff, Timer } from 'lucide-react'
+import { AlarmClock, CheckSquare, Cloud, Dumbbell, Flame, HardDrive, ShieldOff, Timer } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { isConfigured, signIn } from '@/lib/google/auth'

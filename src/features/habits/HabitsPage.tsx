@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, startOfWeek, subWeeks, format } from 'date-fns'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Flame, Link2, Pause, Pencil, Plus, Trash2, Trophy } from 'lucide-react'
+import { Flame, Link2, Pause, Pencil, Plus, Trash2, Trophy } from '@/components/icons'
 import { useSettings, useTable, useToday } from '@/lib/hooks'
 import type { Habit, HabitLog, HabitScheduleKind } from '@/lib/types'
 import { computeStreak, habitLogId, HABIT_COLORS, HABIT_ICONS, isDone, isDueOn, successRate } from '@/lib/habits'

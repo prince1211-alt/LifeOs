@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Check, History, Plus, Timer, Trash2, Trophy, X } from 'lucide-react'
+import { Check, History, Plus, Timer, Trash2, Trophy, X } from '@/components/icons'
 import { db } from '@/lib/db'
 import { useNow, useSettings, useTable } from '@/lib/hooks'
 import { save, remove } from '@/lib/repo'

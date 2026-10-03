@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { addDays, format } from 'date-fns'
-import { CheckSquare, Grid2x2, List, Plus } from 'lucide-react'
+import { CheckSquare, Grid2x2, List, Plus } from '@/components/icons'
 import {
   DndContext,
   closestCenter,

@@ -1,8 +1,13 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { X } from '@/components/icons'
 import { cn } from '@/lib/utils'
+import { Button } from './button'
 
+/**
+ * Material 3 dialog: a modal bottom sheet on phones (drag handle, 28px top corners)
+ * and a basic dialog on larger screens (28px corners, surface-container-high).
+ */
 export function Dialog({
   open,
   onClose,
@@ -10,6 +15,7 @@ export function Dialog({
   children,
   footer,
   className,
+  icon,
 }: {
   open: boolean
   onClose: () => void
@@ -17,6 +23,8 @@ export function Dialog({
   children: React.ReactNode
   footer?: React.ReactNode
   className?: string
+  /** Optional hero icon shown above the title (M3 dialog with icon). */
+  icon?: React.ReactNode
 }) {
   React.useEffect(() => {
     if (!open) return
@@ -32,28 +40,37 @@ export function Dialog({
 
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true">
+      <div className="animate-md-fade absolute inset-0 bg-scrim/40" onClick={onClose} />
       <div
         className={cn(
-          'relative flex max-h-[92vh] w-full flex-col rounded-t-2xl border bg-card shadow-xl sm:max-w-lg sm:rounded-2xl',
+          'animate-md-sheet sm:animate-md-dialog relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-xl bg-surface-container-low text-on-surface shadow-elevation-3 [--field-bg:var(--md-surface-container-low)] sm:max-w-[560px] sm:min-w-[320px] sm:rounded-xl sm:bg-surface-container-high sm:[--field-bg:var(--md-surface-container-high)]',
           className,
         )}
       >
-        <div className="flex items-center justify-between border-b px-5 py-3">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted" aria-label="Close">
-            <X className="h-5 w-5" />
-          </button>
+        <div className="flex justify-center pt-4 pb-1 sm:hidden" aria-hidden>
+          <span className="h-1 w-8 rounded-full bg-on-surface-variant/40" />
         </div>
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t px-5 py-3 pb-safe">{footer}</div>}
+        <div className={cn('flex items-start gap-3 px-6 pt-3 pb-4 sm:pt-6', icon && 'flex-col items-center text-center')}>
+          {icon && <div className="text-secondary [&_svg]:size-6">{icon}</div>}
+          <h2 className="min-w-0 flex-1 text-headline-small text-on-surface">{title}</h2>
+          {!icon && (
+            <Button size="icon" variant="ghost" onClick={onClose} aria-label="Close" className="-mt-1 -mr-3">
+              <X />
+            </Button>
+          )}
+        </div>
+        <div className="overflow-y-auto px-6 pt-2 pb-4 text-body-medium text-on-surface-variant">
+          <div className="text-on-surface">{children}</div>
+        </div>
+        {footer && <div className="flex flex-wrap items-center justify-end gap-2 px-6 pt-2 pb-6 pb-safe">{footer}</div>}
       </div>
     </div>,
     document.body,
   )
 }
 
+/** Promise-based confirm dialog (M3 basic dialog with text buttons). */
 export function useConfirm() {
   const [state, setState] = React.useState<{ text: string; resolve: (v: boolean) => void; danger?: boolean } | null>(null)
   const confirm = React.useCallback(
@@ -71,22 +88,16 @@ export function useConfirm() {
       title="Are you sure?"
       footer={
         <>
-          <button className="h-9 rounded-md px-4 text-sm hover:bg-muted" onClick={() => close(false)}>
+          <Button variant="ghost" onClick={() => close(false)}>
             Cancel
-          </button>
-          <button
-            className={cn(
-              'h-9 rounded-md px-4 text-sm font-medium text-white',
-              state?.danger ? 'bg-destructive' : 'bg-primary',
-            )}
-            onClick={() => close(true)}
-          >
+          </Button>
+          <Button variant="ghost" className={state?.danger ? 'text-error' : undefined} onClick={() => close(true)}>
             Confirm
-          </button>
+          </Button>
         </>
       }
     >
-      <p className="text-sm">{state?.text}</p>
+      <p className="text-body-medium text-on-surface-variant">{state?.text}</p>
     </Dialog>
   )
   return { confirm, node }

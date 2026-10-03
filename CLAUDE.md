@@ -1,6 +1,6 @@
 # LifeOS
 
-Read docs/SPEC.md before any work.
+Read docs/SPEC.md before any work. For any UI change, follow docs/DESIGN.md (Material 3, Google style).
 
 - Fully client-side, no backend. Data lives in IndexedDB (Dexie) and syncs to Google Drive `appDataFolder`.
 - TypeScript strict. Keep each module in `src/features/<module>`.

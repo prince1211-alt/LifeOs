@@ -4,8 +4,15 @@ import './index.css'
 import App from './App'
 import { ensureSeed } from './lib/db'
 import { captureInstallPrompt } from './lib/install'
+import { applyTheme, storedTheme } from './lib/theme'
+import { installRipple } from './lib/ripple'
 
 captureInstallPrompt()
+installRipple()
+{
+  const t = storedTheme()
+  applyTheme(t.theme, t.seed)
+}
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {

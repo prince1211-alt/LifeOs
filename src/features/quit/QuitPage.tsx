@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
-import { Award, Clock, HeartPulse, IndianRupee, Pencil, Plus, RotateCcw, ShieldOff, Trash2, Zap } from 'lucide-react'
+import { Award, Clock, HeartPulse, IndianRupee, Pencil, Plus, RotateCcw, ShieldOff, Trash2, Zap } from '@/components/icons'
 import { useNow, useTable } from '@/lib/hooks'
 import type { Habit, QuitGoal, Relapse, UrgeLog } from '@/lib/types'
 import { bestStreakMs, formatHour, MILESTONES, quitStats, urgeInsights } from '@/lib/quit'

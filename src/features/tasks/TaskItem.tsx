@@ -1,5 +1,5 @@
 import { format, isToday, isTomorrow, isYesterday } from 'date-fns'
-import { Bell, GripVertical, ListChecks, Mail, Repeat, Star } from 'lucide-react'
+import { Bell, GripVertical, ListChecks, Mail, Repeat, Star } from '@/components/icons'
 import type { Task } from '@/lib/types'
 import { cn, formatTime, parseYmd } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/form'

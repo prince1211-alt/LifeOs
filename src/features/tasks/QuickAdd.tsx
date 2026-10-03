@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, Clock, Flag, Plus, Repeat, Sparkles, Tag } from 'lucide-react'
+import { CalendarDays, Clock, Flag, Plus, Repeat, Sparkles, Tag } from '@/components/icons'
 import { Input } from '@/components/ui/form'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/misc'

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNowStrict } from 'date-fns'
-import { Bell, Cloud, Download, LogOut, Mail, Play, RefreshCw, Smartphone, Trash2, Upload, Volume2, X } from 'lucide-react'
+import { Bell, Cloud, Download, LogOut, Mail, Play, RefreshCw, Smartphone, Trash2, Upload, Volume2, X } from '@/components/icons'
 import { useSettings, useTable } from '@/lib/hooks'
 import type { Settings } from '@/lib/types'
 import { save } from '@/lib/repo'

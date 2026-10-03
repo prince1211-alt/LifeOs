@@ -1,4 +1,4 @@
-import { Minus, Plus } from 'lucide-react'
+import { Minus, Plus } from '@/components/icons'
 import type { Habit, HabitLog } from '@/lib/types'
 import { isDone } from '@/lib/habits'
 import { cn, WEEKDAYS_SHORT } from '@/lib/utils'

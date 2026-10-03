@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Check, Loader2, Volume2 } from 'lucide-react'
+import { Bell, Check, Loader2, Volume2 } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { DayPicker, Field, Input, Select } from '@/components/ui/form'
