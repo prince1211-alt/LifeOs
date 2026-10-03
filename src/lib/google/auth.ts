@@ -1,6 +1,7 @@
 // Google Identity Services token client: browser-only OAuth, no client secret.
 // The access token lives in memory only and is re-requested when it expires.
 import { useApp } from '@/store/app'
+import { isNative } from '../native/platform'
 
 export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
 
@@ -96,6 +97,16 @@ async function getClient(): Promise<TokenClient> {
  * interactive=false tries a silent re-request (no consent screen).
  */
 async function requestToken(scopes: string[], interactive: boolean): Promise<string> {
+  if (isNative) {
+    if (!CLIENT_ID) throw new Error('VITE_GOOGLE_CLIENT_ID is not set')
+    const { nativeRequestToken } = await import('../native/google')
+    const r = await nativeRequestToken(CLIENT_ID, [...BASE_SCOPES, ...granted, ...scopes], interactive)
+    token = r.token
+    expiresAt = r.expiresAt
+    r.scopes.forEach((s) => granted.add(s))
+    useApp.getState().setNeedsReconnect(false)
+    return token
+  }
   const c = await getClient()
   if (pending) pending.reject(new Error('superseded'))
   const user = useApp.getState().user
@@ -172,7 +183,8 @@ export async function ensureScopes(scopes: string[]) {
 }
 
 export function signOutGoogle() {
-  if (token && window.google?.accounts?.oauth2) window.google.accounts.oauth2.revoke(token)
+  if (isNative) void import('../native/google').then((m) => m.nativeSignOut())
+  else if (token && window.google?.accounts?.oauth2) window.google.accounts.oauth2.revoke(token)
   token = null
   expiresAt = 0
   granted.clear()

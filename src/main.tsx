@@ -6,6 +6,7 @@ import { ensureSeed } from './lib/db'
 import { captureInstallPrompt } from './lib/install'
 import { applyTheme, storedTheme } from './lib/theme'
 import { installRipple } from './lib/ripple'
+import { isNative } from './lib/native/platform'
 
 captureInstallPrompt()
 installRipple()
@@ -14,7 +15,10 @@ installRipple()
   applyTheme(t.theme, t.seed)
 }
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if (isNative) {
+  // Android app: native notifications, back button, status bar.
+  void import('./lib/native/init').then((m) => m.initNative())
+} else if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => undefined)
   })

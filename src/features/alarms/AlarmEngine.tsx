@@ -8,6 +8,7 @@ import { isDone, isDueOn, habitLogId } from '@/lib/habits'
 import { formatTime, ymd } from '@/lib/utils'
 import { lastScheduled, nextAlarm } from './schedule'
 import type { Alarm } from '@/lib/types'
+import { isNative, requestReschedule } from '@/lib/native/platform'
 
 const GRACE_MS = 10 * 60_000
 const FIRED_KEY = 'lifeos-fired'
@@ -30,6 +31,11 @@ function writeMap(key: string, m: Record<string, number>) {
   }
 }
 
+/** Pending snoozes: alarm id → time it should ring again. */
+export function getSnoozes(): Record<string, number> {
+  return readMap(SNOOZE_KEY)
+}
+
 /** Mark a key as fired; returns false if it already fired. */
 function once(key: string, at: number): boolean {
   const fired = readMap(FIRED_KEY)
@@ -37,6 +43,20 @@ function once(key: string, at: number): boolean {
   fired[key] = at
   writeMap(FIRED_KEY, fired)
   return true
+}
+
+/**
+ * Record that the current occurrence of an alarm (or its snooze) was already handled,
+ * e.g. from the Android notification, so the in-app engine doesn't ring it again.
+ */
+export function markAlarmHandled(a: Alarm, now = Date.now()) {
+  const t = lastScheduled(a, now)
+  if (t) once(`alarm:${a.id}:${t}`, now)
+  const m = readMap(SNOOZE_KEY)
+  if (m[a.id] && m[a.id] <= now + 1000) {
+    delete m[a.id]
+    writeMap(SNOOZE_KEY, m)
+  }
 }
 
 export function ring(a: Alarm) {
@@ -63,6 +83,7 @@ export function snooze(alarmId: string, minutes: number) {
   writeMap(SNOOZE_KEY, m)
   stopAlarmSound()
   useApp.getState().setRinging(null)
+  requestReschedule()
 }
 
 export async function dismiss(alarmId: string) {
@@ -73,6 +94,7 @@ export async function dismiss(alarmId: string) {
   useApp.getState().setRinging(null)
   const a = await db.alarms.get(alarmId)
   if (a && !a.repeatDays.length && a.enabled) await save('alarms', { id: a.id, enabled: false })
+  requestReschedule()
 }
 
 /**
@@ -119,6 +141,10 @@ export function AlarmEngine() {
             }
           }
         }
+
+        // In the Android app, reminders are real scheduled notifications
+        // (src/lib/native/notifications.ts) and the screen may sleep.
+        if (isNative) return
 
         // Task reminders: X minutes before the task's time.
         const today = ymd(now)

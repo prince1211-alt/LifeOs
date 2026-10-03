@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { NAVIGATE_EVENT } from '@/lib/native/platform'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AppShell } from '@/components/layout/AppShell'
 import { Toaster } from '@/components/Toaster'
@@ -55,6 +56,17 @@ function useBootstrap() {
   }, [user?.mode, user?.email])
 }
 
+/** Lets non-React code (notification taps, back button) navigate. */
+function NavigationBridge() {
+  const nav = useNavigate()
+  useEffect(() => {
+    const on = (e: Event) => nav((e as CustomEvent<string>).detail)
+    window.addEventListener(NAVIGATE_EVENT, on)
+    return () => window.removeEventListener(NAVIGATE_EVENT, on)
+  }, [nav])
+  return null
+}
+
 function ThemeSync() {
   const s = useSettings()
   useEffect(() => {
@@ -85,6 +97,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ThemeSync />
+      <NavigationBridge />
       <Suspense fallback={null}>
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/today" replace /> : <LoginPage />} />

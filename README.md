@@ -80,9 +80,45 @@ Add the deployed URL to the OAuth client's authorized origins.
 - Merges are record by record; the newer `updatedAt` wins. Deletes are soft (`deletedAt`) and purged after 30 days.
 - Access tokens last ~1 hour; LifeOS re-requests silently and shows **Reconnect Google** if that fails. Local data stays safe.
 
+## Android app (APK)
+
+The same app is packaged for Android with [Capacitor](https://capacitorjs.com). On Android, alarms, snoozes,
+task and habit reminders, and the Pomodoro/rest timers are **scheduled system notifications**, so they ring
+even when LifeOS is closed or the phone is locked.
+
+**Download:** https://github.com/prince1211-alt/LifeOs/releases/latest/download/LifeOS.apk
+(open on the phone → tap the file → allow "Install unknown apps" for your browser when asked).
+
+The APK is built by GitHub Actions (`.github/workflows/android.yml`) on every push to `main` and published as a
+release. Every build is signed with the same key, so updates install over the old version and keep your data.
+
+### One-time setup
+
+| Where | What | Why |
+| --- | --- | --- |
+| GitHub → Settings → Secrets and variables → Actions → **Secrets** | `LIFEOS_KEYSTORE_PASSWORD` = the keystore password | Unlocks the committed, encrypted signing key `android/app/lifeos-release.p12` |
+| Same page → **Variables** | `VITE_GOOGLE_CLIENT_ID` = your Web client ID | Google sign-in inside the app |
+| Google Cloud → Google Auth Platform → Clients → **Create client → Android** | Package name `app.lifeos.android`, SHA-1 `15:9B:EA:EB:60:36:33:73:2D:65:55:56:5B:5B:34:0A:41:88:5B:60` | Lets the app use Android's Google sign-in (same project as the Web client) |
+
+Without the secret the workflow still builds a debug-signed APK (artifact only, no release); without the variable the
+app works in "this device only" mode.
+
+### Build locally
+
+Needs JDK 21 and the Android SDK (or Android Studio):
+
+```bash
+npm run build && npx cap sync android
+cd android && ./gradlew assembleDebug    # → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Native code: `android/` (MainActivity forwards Google consent results to the sign-in plugin),
+`src/lib/native/` (notification scheduling, Google sign-in, back button, status bar),
+`scripts/gen-android-sounds.mjs` (notification sounds).
+
 ## Known limits (no backend)
 
-- Alarms and the summary email only fire while LifeOS is open (pinned tab or installed PWA). Use Calendar mirroring as a phone backup.
+- On the **web**, alarms and the summary email only fire while LifeOS is open (pinned tab or installed PWA). The **Android app** rings alarms and reminders even when closed; the summary email still sends when the app opens.
 - Browsers block sound until one tap per session — use **Enable alarm sound**.
 - On phones, a Screen Wake Lock is requested while an alarm is armed so the page isn't suspended.
 

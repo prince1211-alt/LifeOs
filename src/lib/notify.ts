@@ -1,12 +1,30 @@
+import { LocalNotifications } from '@capacitor/local-notifications'
+import { isNative, requestReschedule } from './native/platform'
+
+// In the Android app, notifications are native (src/lib/native/notifications.ts);
+// this module only tracks their permission so the UI can show it.
+let nativePerm: NotificationPermission = 'default'
+
+export function setNativePermission(display: string) {
+  nativePerm = display === 'granted' ? 'granted' : display === 'denied' ? 'denied' : 'default'
+}
+
 export function notificationsSupported() {
-  return typeof window !== 'undefined' && 'Notification' in window
+  return isNative || (typeof window !== 'undefined' && 'Notification' in window)
 }
 
 export function notificationPermission(): NotificationPermission | 'unsupported' {
+  if (isNative) return nativePerm
   return notificationsSupported() ? Notification.permission : 'unsupported'
 }
 
 export async function requestNotifications(): Promise<NotificationPermission | 'unsupported'> {
+  if (isNative) {
+    const { display } = await LocalNotifications.requestPermissions()
+    setNativePermission(display)
+    if (nativePerm === 'granted') requestReschedule()
+    return nativePerm
+  }
   if (!notificationsSupported()) return 'unsupported'
   if (Notification.permission !== 'default') return Notification.permission
   return Notification.requestPermission()
@@ -14,7 +32,8 @@ export async function requestNotifications(): Promise<NotificationPermission | '
 
 /** Show a notification; uses the service worker when available (needed on Android). */
 export async function notify(title: string, body: string, opts: { tag?: string; url?: string; sticky?: boolean } = {}) {
-  if (notificationPermission() !== 'granted') return
+  // The Android app schedules its own system notifications ahead of time.
+  if (isNative || notificationPermission() !== 'granted') return
   const options: NotificationOptions & { renotify?: boolean } = {
     body,
     tag: opts.tag,
@@ -62,3 +81,25 @@ export async function setWakeLock(on: boolean) {
 }
 
 export const wakeLockActive = () => Boolean(lock)
+
+/** "Test" button in Settings: a real notification in the browser or the Android app. */
+export async function sendTestNotification() {
+  if (isNative) {
+    if (nativePerm !== 'granted') return
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: 900_100,
+          title: 'LifeOS test',
+          body: 'Notifications and sound are working 🎉',
+          channelId: 'lifeos_reminders',
+          smallIcon: 'ic_stat_lifeos',
+          iconColor: '#0B57D0',
+          schedule: { at: new Date(Date.now() + 1500), allowWhileIdle: true },
+        },
+      ],
+    })
+    return
+  }
+  await notify('LifeOS test', 'Notifications and sound are working 🎉', { tag: 'test' })
+}
