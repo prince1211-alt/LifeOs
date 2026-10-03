@@ -1,6 +1,7 @@
 // Android app only: turns alarms, snoozes, task/habit reminders and running timers
 // into scheduled system notifications, so they fire even when LifeOS is closed.
 import { liveQuery } from 'dexie'
+import { App } from '@capacitor/app'
 import { LocalNotifications, type ActionPerformed, type LocalNotificationSchema } from '@capacitor/local-notifications'
 import { db } from '../db'
 import { isDueOn, isDone, habitLogId } from '../habits'
@@ -15,7 +16,8 @@ import { useRest } from '@/features/gym/rest'
 import { useApp } from '@/store/app'
 
 const CHANNELS = {
-  alarms: 'lifeos_alarms',
+  // Created in MainActivity with USAGE_ALARM audio, so it rings on vibrate/silent and through Do Not Disturb.
+  alarms: 'lifeos_alarm_clock',
   reminders: 'lifeos_reminders',
   timers: 'lifeos_timers',
 } as const
@@ -52,17 +54,8 @@ const atTime = (date: string, time: string) => {
 }
 
 async function setupChannels() {
-  await LocalNotifications.createChannel({
-    id: CHANNELS.alarms,
-    name: 'Alarms',
-    description: 'Wake-up and other alarms',
-    importance: 5, // max: sound + heads-up
-    visibility: 1, // show on the lock screen
-    sound: 'lifeos_alarm.wav',
-    vibration: true,
-    lights: true,
-    lightColor: '#0B57D0',
-  })
+  // First builds made the alarm channel with notification audio; it can't be changed, so drop it.
+  await LocalNotifications.deleteChannel({ id: 'lifeos_alarms' }).catch(() => undefined)
   await LocalNotifications.createChannel({
     id: CHANNELS.reminders,
     name: 'Reminders',
@@ -126,11 +119,17 @@ async function wanted(now = Date.now()): Promise<LocalNotificationSchema[]> {
       extra: { lifeos: MANAGED, kind: 'alarm', alarmId: a.id, url: '/alarms' } satisfies Extra,
     }
     if (a.repeatDays.length) {
-      for (const d of a.repeatDays)
-        out.push({ ...common, id: notificationId(`alarm:${a.id}:${d}`), schedule: { on: { weekday: d + 1, hour, minute }, allowWhileIdle: true } })
+      // One exact wake-up alarm per occurrence (repeating "on" schedules re-arm as non-wakeup alarms).
+      const base = new Date(now)
+      for (let i = 0; i < 28; i++) {
+        const at = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i, hour, minute, 0, 0)
+        if (at.getTime() <= now || !a.repeatDays.includes(at.getDay())) continue
+        out.push({ ...common, id: notificationId(`alarm:${a.id}:${at.getTime()}`), schedule: { at, allowWhileIdle: true } })
+      }
     } else {
-      const t = nextFire(a, now)
-      if (t) out.push({ ...common, id: notificationId(`alarm:${a.id}`), schedule: { at: new Date(t), allowWhileIdle: true } })
+      // A one-off alarm rings once: at the first slot after it was set, never again the next day.
+      const t = nextFire(a, a.updatedAt)
+      if (t && t > now) out.push({ ...common, id: notificationId(`alarm:${a.id}:${t}`), schedule: { at: new Date(t), allowWhileIdle: true } })
     }
   }
 
@@ -171,9 +170,10 @@ async function wanted(now = Date.now()): Promise<LocalNotificationSchema[]> {
   const remindable = habits.filter((h) => !h.archived && h.reminderTime)
   if (remindable.length) {
     const logs = live(await db.habitLogs.where('date').aboveOrEqual(ymd(now - 7 * 86_400_000)).toArray())
+    const base = new Date(now)
     for (const h of remindable) {
       for (let i = 0; i < HORIZON_DAYS; i++) {
-        const day = new Date(now + i * 86_400_000)
+        const day = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i)
         const date = ymd(day)
         const at = atTime(date, h.reminderTime!)
         if (at.getTime() <= now) continue
@@ -195,6 +195,28 @@ async function wanted(now = Date.now()): Promise<LocalNotificationSchema[]> {
   return out
 }
 
+/**
+ * Without the "Alarms & reminders" permission (Android 12/12L can revoke it), schedule
+ * inexact rather than letting every schedule() call open that settings screen.
+ */
+async function exactAllowed(): Promise<boolean> {
+  try {
+    return (await LocalNotifications.checkExactNotificationSetting()).exact_alarm === 'granted'
+  } catch {
+    return true
+  }
+}
+
+/** Two notifications with the same id replace each other; nudge rare hash collisions apart. */
+function uniqueIds(list: LocalNotificationSchema[]) {
+  const used = new Set<number>()
+  for (const n of list) {
+    while (used.has(n.id)) n.id = n.id >= 899_999 ? 1_000 : n.id + 1
+    used.add(n.id)
+  }
+  return list
+}
+
 let running: Promise<void> | null = null
 let again = false
 
@@ -210,9 +232,10 @@ export function resync(): Promise<void> {
       const pending = await LocalNotifications.getPending()
       const ours = pending.notifications.filter((n) => (n.extra as Extra | undefined)?.lifeos === MANAGED)
       if (ours.length) await LocalNotifications.cancel({ notifications: ours.map((n) => ({ id: n.id })) })
-      const list = await wanted()
+      const exact = await exactAllowed()
       // Android caps an app at 500 pending alarms; keep well under it.
-      if (list.length) await LocalNotifications.schedule({ notifications: list.slice(0, 400) })
+      const list = uniqueIds(await wanted()).slice(0, 400).map((n) => (exact ? n : { ...n, isExactNotification: false }))
+      if (list.length) await LocalNotifications.schedule({ notifications: list })
     } catch (e) {
       console.warn('Could not schedule notifications', e)
     } finally {
@@ -253,6 +276,7 @@ function watchTimers() {
               channelId: CHANNELS.timers,
               autoCancel: true,
               schedule: { at: new Date(endsAt), allowWhileIdle: true },
+              isExactNotification: await exactAllowed(),
               extra: { lifeos: 'timer', kind: 'timer', url: key === 'rest' ? '/gym' : '/focus' } satisfies Extra,
             },
           ],
@@ -273,6 +297,19 @@ function watchTimers() {
   onRest(useRest.getState())
   usePomodoro.subscribe(onPomodoro)
   useRest.subscribe(onRest)
+}
+
+async function onReceived(n: LocalNotificationSchema, foreground: boolean) {
+  if (!foreground) return // background or screen off: let Android ring
+  const extra = n.extra as Extra | undefined
+  if (extra?.kind !== 'alarm' && extra?.kind !== 'timer') return
+  void LocalNotifications.removeDeliveredNotificationsById({ ids: [n.id] })
+  if (extra.kind === 'alarm' && extra.alarmId) {
+    const a = await db.alarms.get(extra.alarmId)
+    if (!a) return
+    markAlarmHandled(a)
+    if (useApp.getState().ringing?.alarmId !== a.id) ring(a)
+  }
 }
 
 async function onAction({ actionId, notification }: ActionPerformed) {
@@ -296,18 +333,25 @@ let started = false
 export async function initNativeNotifications() {
   if (started) return
   started = true
+  await LocalNotifications.addListener('localNotificationActionPerformed', (a) => void onAction(a))
   try {
     await setupChannels()
   } catch (e) {
     console.warn('Notification channels', e)
   }
-  await LocalNotifications.addListener('localNotificationActionPerformed', (a) => void onAction(a))
-  // While LifeOS is open, the in-app ring screen / timers take over: silence the system copy.
-  await LocalNotifications.addListener('localNotificationReceived', (n) => {
-    const extra = n.extra as Extra | undefined
-    if (extra?.kind === 'alarm' || extra?.kind === 'timer')
-      void LocalNotifications.removeDeliveredNotifications({ notifications: [{ id: n.id, title: n.title, body: n.body }] })
+  // Android 13+: ask once so synced alarms can be scheduled (no tap needed in the app).
+  try {
+    const { display } = await LocalNotifications.checkPermissions()
+    if (display === 'prompt' || display === 'prompt-with-rationale') setNativePermission((await LocalNotifications.requestPermissions()).display)
+  } catch {
+    /* ignore */
+  }
+  let foreground = (await App.getState()).isActive
+  await App.addListener('appStateChange', ({ isActive }) => {
+    foreground = isActive
   })
+  // Only while LifeOS is on screen does the in-app ring screen / timer take over from the system notification.
+  await LocalNotifications.addListener('localNotificationReceived', (n) => void onReceived(n, foreground))
   window.addEventListener(SCHEDULE_EVENT, resyncSoon)
   // Any change to alarms, tasks, habits or check-ins reschedules (debounced).
   liveQuery(async () => {

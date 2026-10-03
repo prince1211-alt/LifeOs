@@ -17,10 +17,10 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // Release signing. The keystore is committed but encrypted (PKCS12, AES-256);
-    // its password lives only in the LIFEOS_KEYSTORE_PASSWORD GitHub secret.
+    // Release signing. CI creates android/app/lifeos-release.p12 once (encrypted PKCS12) from the
+    // LIFEOS_KEYSTORE_PASSWORD GitHub secret and commits it; the password never leaves GitHub.
     // Keeping one key means updates install in place and Google sign-in keeps working.
-    def keystorePassword = System.getenv("LIFEOS_KEYSTORE_PASSWORD")
+    def keystorePassword = file("lifeos-release.p12").exists() ? System.getenv("LIFEOS_KEYSTORE_PASSWORD") : null
     signingConfigs {
         release {
             if (keystorePassword) {

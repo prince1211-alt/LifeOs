@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { db } from '@/lib/db'
 import { useApp } from '@/store/app'
 import { playAlarmSound, playOnce, stopAlarmSound } from '@/lib/audio'
-import { notify, setWakeLock } from '@/lib/notify'
+import { notificationPermission, notify, setWakeLock } from '@/lib/notify'
 import { save } from '@/lib/repo'
 import { isDone, isDueOn, habitLogId } from '@/lib/habits'
 import { formatTime, ymd } from '@/lib/utils'
@@ -116,8 +116,12 @@ export function AlarmEngine() {
         const live = alarms.filter((a) => !a.deletedAt)
         const ringing = useApp.getState().ringing
 
+        // In the Android app, scheduled system notifications ring alarms and snoozes
+        // (and hand over to the ring screen when LifeOS is open).
+        const nativeOwns = isNative && notificationPermission() === 'granted'
+
         // Alarms
-        if (!ringing) {
+        if (!ringing && !nativeOwns) {
           for (const a of live) {
             const t = lastScheduled(a, now)
             if (t && now - t < GRACE_MS && once(`alarm:${a.id}:${t}`, now)) {
@@ -127,7 +131,7 @@ export function AlarmEngine() {
           }
         }
         // Snoozed alarms
-        if (!useApp.getState().ringing) {
+        if (!useApp.getState().ringing && !nativeOwns) {
           const snoozes = readMap(SNOOZE_KEY)
           for (const [id, until] of Object.entries(snoozes)) {
             if (until <= now) {

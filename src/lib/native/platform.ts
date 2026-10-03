@@ -16,8 +16,21 @@ export function requestReschedule() {
 /** Ask the app shell to navigate (used by notification taps and the back button). */
 export const NAVIGATE_EVENT = 'lifeos:navigate'
 
+let pendingNav: string | null = null
+let navReady = false
+
+/** Navigate from outside React; remembered until the router is mounted (cold start from a notification). */
 export function navigateTo(url: string) {
+  if (!navReady) pendingNav = url
   window.dispatchEvent(new CustomEvent(NAVIGATE_EVENT, { detail: url }))
+}
+
+/** Called by the router once it listens; returns a navigation requested before that. */
+export function takePendingNav(): string | null {
+  navReady = true
+  const url = pendingNav
+  pendingNav = null
+  return url
 }
 
 /** Android status/navigation bar icons: dark on the light theme, light on the dark theme. */

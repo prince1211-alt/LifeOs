@@ -42,7 +42,8 @@ export async function nativeRequestToken(clientId: string, scopes: string[], int
   const extra = [...new Set([...nativeGrantedScopes(), ...scopes])].filter((s) => !DEFAULTS.has(s))
   const res = await SocialLogin.login({
     provider: 'google',
-    options: interactive ? { scopes: extra } : { scopes: extra, filterByAuthorizedAccounts: true, autoSelectEnabled: true },
+    // Silent refresh: the bottom-sheet flow auto-selects the already-authorised account.
+    options: interactive ? { scopes: extra } : { scopes: extra, style: 'bottom', filterByAuthorizedAccounts: true, autoSelectEnabled: true },
   })
   const r = res.result as {
     accessToken: { token: string; expires?: string } | null

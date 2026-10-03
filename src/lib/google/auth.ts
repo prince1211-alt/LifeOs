@@ -152,6 +152,8 @@ export function hasValidToken() {
 /** Returns a usable token, re-requesting silently; flags "Reconnect Google" on failure. */
 export async function getToken(scopes: string[] = [], interactive = false): Promise<string> {
   if (token && Date.now() < expiresAt && hasScopes(scopes)) return token
+  // In the app a background refresh can show Google's account sheet; after one miss, wait for "Reconnect".
+  if (!interactive && isNative && useApp.getState().needsReconnect) throw new Error('Reconnect Google to continue syncing')
   try {
     return await requestToken(scopes, interactive)
   } catch (e) {

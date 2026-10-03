@@ -96,12 +96,12 @@ release. Every build is signed with the same key, so updates install over the ol
 
 | Where | What | Why |
 | --- | --- | --- |
-| GitHub → Settings → Secrets and variables → Actions → **Secrets** | `LIFEOS_KEYSTORE_PASSWORD` = the keystore password | Unlocks the committed, encrypted signing key `android/app/lifeos-release.p12` |
+| GitHub → Settings → Secrets and variables → Actions → **Secrets** | `LIFEOS_KEYSTORE_PASSWORD` = any long password you choose (keep a copy) | The first build on `main` creates the signing key `android/app/lifeos-release.p12`, encrypted with it, and commits it |
 | Same page → **Variables** | `VITE_GOOGLE_CLIENT_ID` = your Web client ID | Google sign-in inside the app |
-| Google Cloud → Google Auth Platform → Clients → **Create client → Android** | Package name `app.lifeos.android`, SHA-1 `15:9B:EA:EB:60:36:33:73:2D:65:55:56:5B:5B:34:0A:41:88:5B:60` | Lets the app use Android's Google sign-in (same project as the Web client) |
+| Google Cloud → Google Auth Platform → Clients → **Create client → Android** | Package name `app.lifeos.android` + the SHA-1 shown in the release notes | Lets the app use Android's Google sign-in (same project as the Web client) |
 
-Without the secret the workflow still builds a debug-signed APK (artifact only, no release); without the variable the
-app works in "this device only" mode.
+Then push to `main` (or run the workflow from the Actions tab). Without the secret the workflow builds a test APK
+signed with a temporary key (artifact only, no release); without the variable the app works in "this device only" mode.
 
 ### Build locally
 

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { NAVIGATE_EVENT } from '@/lib/native/platform'
+import { NAVIGATE_EVENT, takePendingNav } from '@/lib/native/platform'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AppShell } from '@/components/layout/AppShell'
 import { Toaster } from '@/components/Toaster'
@@ -62,6 +62,8 @@ function NavigationBridge() {
   useEffect(() => {
     const on = (e: Event) => nav((e as CustomEvent<string>).detail)
     window.addEventListener(NAVIGATE_EVENT, on)
+    const pending = takePendingNav()
+    if (pending) nav(pending)
     return () => window.removeEventListener(NAVIGATE_EVENT, on)
   }, [nav])
   return null
