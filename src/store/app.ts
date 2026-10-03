@@ -62,7 +62,8 @@ export const useApp = create<AppState>()(
       setRinging: (ringing) => set({ ringing }),
       toast: (text, action) => {
         const id = ++toastId
-        set((st) => ({ toasts: [...st.toasts, { id, text, action }] }))
+        // Material shows one snackbar at a time; a new one replaces the old.
+        set({ toasts: [{ id, text, action }] })
         setTimeout(() => set((st) => ({ toasts: st.toasts.filter((t) => t.id !== id) })), 5000)
       },
       dismissToast: (id) => set((st) => ({ toasts: st.toasts.filter((t) => t.id !== id) })),

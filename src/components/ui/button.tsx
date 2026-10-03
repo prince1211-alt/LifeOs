@@ -96,6 +96,7 @@ export function Fab({
       type="button"
       onClick={onClick}
       aria-label={label}
+      data-page-fab={fixed ? '' : undefined}
       className={cn(
         'state-layer inline-flex h-14 items-center justify-center gap-3 rounded-lg text-label-large shadow-elevation-3 transition-shadow duration-200 hover:shadow-[var(--md-elevation-3),0_6px_12px_4px_rgb(0_0_0/0.12)] [&_svg]:size-6',
         label ? 'min-w-20 px-4 pr-5' : 'w-14',

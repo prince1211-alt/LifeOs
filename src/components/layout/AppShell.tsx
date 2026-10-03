@@ -248,9 +248,19 @@ export function AppShell() {
         <IconButton label={rail ? 'Expand menu' : 'Collapse menu'} className="hidden md:inline-flex" onClick={() => setRailPref(!rail)}>
           <Menu />
         </IconButton>
-        <div className="flex items-center gap-2 pl-2 md:hidden">
+        <div className="relative flex items-center gap-2 pl-2 md:hidden">
           <LogoMark size={28} />
-          <span className="text-title-large text-on-surface">{titleFor(loc.pathname)}</span>
+          {/* The page's own headline is the large title; the small title appears once it scrolls away. */}
+          <span className={cn('text-title-large transition-opacity duration-200', scrolled ? 'opacity-0' : 'opacity-100')} aria-hidden={scrolled}>
+            <span className="font-medium text-on-surface">Life</span>
+            <span className="text-on-surface-variant">OS</span>
+          </span>
+          <span
+            className={cn('absolute left-11 whitespace-nowrap text-title-large text-on-surface transition-opacity duration-200', scrolled ? 'opacity-100' : 'opacity-0')}
+            aria-hidden={!scrolled}
+          >
+            {titleFor(loc.pathname)}
+          </span>
         </div>
         <div className="hidden pl-1 md:block">
           <Logo />
@@ -307,7 +317,7 @@ export function AppShell() {
         {/* Content pane: white rounded sheet on the tinted frame (Drive/Gmail), plain surface on phones */}
         <main
           className={cn(
-            'min-w-0 flex-1 bg-surface pb-[calc(104px+env(safe-area-inset-bottom))] [--field-bg:var(--md-surface)]',
+            'min-w-0 flex-1 bg-surface pb-[calc(168px+env(safe-area-inset-bottom))] [--field-bg:var(--md-surface)]',
             'md:mr-4 md:mb-4 md:min-h-[calc(100vh-5rem)] md:rounded-xl md:bg-surface-container-lowest md:pb-10 md:[--field-bg:var(--md-surface-container-lowest)]',
           )}
         >

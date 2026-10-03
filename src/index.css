@@ -266,7 +266,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.pb-safe {
+@utility pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
 

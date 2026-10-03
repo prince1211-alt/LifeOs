@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { AlarmClock, BellOff, Moon } from '@/components/icons'
+import { AlarmClock, BellOff, Snooze, Volume2 } from '@/components/icons'
 import { useApp } from '@/store/app'
 import { useNow, useSettings } from '@/lib/hooks'
 import { dismiss, snooze } from './AlarmEngine'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/form'
+import { Field, Input } from '@/components/ui/form'
 import { playAlarmSound } from '@/lib/audio'
 
 function makeProblem() {
@@ -45,63 +45,70 @@ export function RingScreen() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-between bg-gradient-to-b from-indigo-950 via-slate-900 to-black px-6 py-12 text-white">
-      <div className="flex flex-col items-center gap-2 pt-6">
-        <AlarmClock className="animate-ring-pulse h-12 w-12 text-indigo-300" />
-        <div className="tabular text-7xl font-bold tracking-tight sm:text-8xl">
-          {format(now, settings.timeFormat === '24' ? 'HH:mm' : 'h:mm')}
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-label={ringing.label || 'Alarm'}
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-between gap-8 overflow-y-auto bg-linear-to-b from-primary-container via-surface-container-low to-surface-container-lowest px-6 pt-[max(3rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))] text-on-surface"
+    >
+      <div className="flex flex-col items-center gap-2 pt-4 text-center">
+        <div className="animate-ring-pulse mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-on-primary">
+          <AlarmClock filled className="size-8" />
         </div>
-        <div className="text-lg text-indigo-200">{format(now, 'EEEE, d MMMM')}</div>
-        <div className="mt-4 text-2xl font-semibold">{ringing.label}</div>
+        <div className="text-title-medium text-on-surface-variant">{format(now, 'EEEE, d MMMM')}</div>
+        <div className="tabular text-display-large" style={{ fontSize: 'clamp(64px, 24vw, 128px)', lineHeight: 1.05 }}>
+          {format(now, settings.timeFormat === '24' ? 'HH:mm' : 'h:mm')}
+          {settings.timeFormat !== '24' && <span className="ml-2 text-headline-medium">{format(now, 'a').toLowerCase()}</span>}
+        </div>
+        <div className="mt-2 text-headline-small">{ringing.label}</div>
         {!audioUnlocked && (
-          <Button
-            variant="secondary"
-            className="mt-2"
-            onClick={() => playAlarmSound(ringing.sound, ringing.volume, ringing.gradual)}
-          >
-            Tap to play sound
+          <Button variant="secondary" className="mt-4" onClick={() => playAlarmSound(ringing.sound, ringing.volume, ringing.gradual)}>
+            <Volume2 /> Tap to play sound
           </Button>
         )}
       </div>
 
       {solving ? (
         <form
-          className="flex w-full max-w-sm flex-col gap-3"
+          className="w-full max-w-sm rounded-xl bg-surface-container-high p-6 [--field-bg:var(--md-surface-container-high)]"
           onSubmit={(e) => {
             e.preventDefault()
             tryDismiss()
           }}
         >
-          <p className="text-center text-indigo-200">Solve to dismiss</p>
-          <div className="tabular text-center text-4xl font-bold">{problem.text} = ?</div>
-          <Input
-            autoFocus
-            inputMode="numeric"
-            value={answer}
-            onChange={(e) => {
-              setAnswer(e.target.value)
-              setWrong(false)
-            }}
-            className="h-14 border-white/20 bg-white/10 text-center text-2xl text-white"
-          />
-          {wrong && <p className="text-center text-sm text-red-300">Not quite — try again.</p>}
-          <Button type="submit" size="lg" className="h-14 bg-white text-lg text-slate-900 hover:bg-white/90">
-            Check answer
+          <p className="text-center text-title-small text-on-surface-variant">Solve to dismiss</p>
+          <div className="tabular mt-2 mb-6 text-center text-display-small text-on-surface">{problem.text} = ?</div>
+          <Field label="Answer" supporting={wrong ? <span className="text-error">Not quite — try again.</span> : undefined}>
+            <Input
+              autoFocus
+              inputMode="numeric"
+              aria-label="Answer"
+              aria-invalid={wrong || undefined}
+              value={answer}
+              onChange={(e) => {
+                setAnswer(e.target.value)
+                setWrong(false)
+              }}
+              className="tabular h-16 text-center text-headline-medium"
+            />
+          </Field>
+          <Button type="submit" className="mt-4 h-14 w-full">
+            <span className="text-title-medium">Check answer</span>
           </Button>
         </form>
       ) : null}
 
-      <div className="flex w-full max-w-sm flex-col gap-3">
+      <div className="flex w-full max-w-md flex-col gap-3 sm:flex-row">
         <Button
-          size="lg"
-          className="h-16 rounded-2xl bg-indigo-500 text-xl hover:bg-indigo-400"
+          variant="secondary"
+          className="h-16 w-full sm:flex-1 [&_svg]:size-6"
           onClick={() => snooze(ringing.alarmId, ringing.snoozeMinutes)}
         >
-          <Moon className="!size-6" /> Snooze {ringing.snoozeMinutes} min
+          <Snooze /> <span className="text-title-medium">Snooze {ringing.snoozeMinutes} min</span>
         </Button>
         {!solving && (
-          <Button size="lg" className="h-16 rounded-2xl bg-white text-xl text-slate-900 hover:bg-white/90" onClick={tryDismiss}>
-            <BellOff className="!size-6" /> Dismiss
+          <Button className="h-16 w-full sm:flex-1 [&_svg]:size-6" onClick={tryDismiss}>
+            <BellOff /> <span className="text-title-medium">Dismiss</span>
           </Button>
         )}
       </div>

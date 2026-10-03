@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Check, Loader2, Volume2 } from '@/components/icons'
+import { LogoMark } from '@/components/layout/AppShell'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { DayPicker, Field, Input, Select } from '@/components/ui/form'
-import { Progress } from '@/components/ui/misc'
+import { Divider, Progress } from '@/components/ui/misc'
 import { requestNotifications, notificationPermission } from '@/lib/notify'
 import { unlockAudio, playOnce } from '@/lib/audio'
 import { save } from '@/lib/repo'
@@ -26,6 +26,47 @@ const SUGGESTED = [
 ]
 
 const STEPS = ['Alerts', 'Alarm', 'Habits', 'Quit', 'Gym']
+
+const STEP_TEXT = [
+  { title: 'Allow alerts', text: 'LifeOS needs notifications and sound so alarms and reminders can reach you.' },
+  { title: 'Set a wake-up alarm', text: 'Pick a time and the days it repeats. You can add more alarms later.' },
+  { title: 'Pick up to 3 good habits', text: 'Start small. You can add more habits later.' },
+  { title: 'Quit something?', text: 'Optional. LifeOS counts your clean time and the money and time you save.' },
+  { title: 'Choose your gym days', text: 'Pick a workout for each day, or leave it as a rest day.' },
+]
+
+/** Tonal permission card: icon disc, title, supporting text and one action. */
+function PermissionCard({
+  icon,
+  title,
+  text,
+  done,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  text: string
+  done: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex gap-4 rounded-lg bg-surface-container p-4">
+      <span
+        className={cn(
+          'flex size-10 shrink-0 items-center justify-center rounded-full [&_svg]:size-6',
+          done ? 'bg-success-container text-on-success-container' : 'bg-secondary-container text-on-secondary-container',
+        )}
+      >
+        {done ? <Check /> : icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-title-medium text-on-surface">{title}</div>
+        <p className="mt-0.5 text-body-medium text-on-surface-variant">{text}</p>
+        <div className="mt-3">{children}</div>
+      </div>
+    </div>
+  )
+}
 
 /** First-time onboarding: runs only when the account has no LifeOS data yet. */
 export function OnboardingPage() {
@@ -49,9 +90,10 @@ export function OnboardingPage() {
 
   if (user?.mode === 'google' && sync.status === 'syncing' && !sync.lastSyncedAt)
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-muted-foreground">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        Loading your LifeOS data from Google Drive…
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-surface px-6 text-center">
+        <LogoMark size={56} />
+        <Loader2 className="size-10 animate-spin text-primary" />
+        <p className="text-body-large text-on-surface-variant">Loading your LifeOS data from Google Drive…</p>
       </div>
     )
 
@@ -81,129 +123,167 @@ export function OnboardingPage() {
     nav('/today', { replace: true })
   }
 
+  const granted = perm === 'granted'
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 via-background to-background p-4">
-      <Card className="w-full max-w-lg p-6">
-        <div className="mb-5">
-          <div className="mb-2 flex justify-between text-xs text-muted-foreground">
-            <span>
-              Step {step + 1} of {STEPS.length} · {STEPS[step]}
-            </span>
-            <button onClick={skipAll} className="hover:text-foreground">
-              Skip setup
-            </button>
-          </div>
+    <div className="flex min-h-dvh flex-col bg-surface sm:items-center sm:justify-center sm:p-6">
+      <div className="flex w-full flex-1 flex-col overflow-hidden [--field-bg:var(--md-surface)] sm:max-w-[560px] sm:flex-none sm:rounded-xl sm:bg-surface-container-low sm:[--field-bg:var(--md-surface-container-low)]">
+        <div className="sm:px-8 sm:pt-6">
           <Progress value={(step + 1) / STEPS.length} />
         </div>
 
-        {step === 0 && (
-          <div className="grid gap-4">
-            <h2 className="text-xl font-bold">Allow alerts</h2>
-            <p className="text-sm text-muted-foreground">LifeOS needs notifications and sound so alarms and reminders can reach you.</p>
-            <Button
-              size="lg"
-              variant={perm === 'granted' ? 'outline' : 'default'}
-              onClick={async () => setPerm(await requestNotifications())}
-            >
-              {perm === 'granted' ? <Check /> : <Bell />} {perm === 'granted' ? 'Notifications allowed' : 'Allow notifications'}
-            </Button>
-            {perm === 'denied' && <p className="text-xs text-destructive">Blocked — you can allow notifications later in your browser settings.</p>}
-            <Button
-              size="lg"
-              variant={audio ? 'outline' : 'default'}
-              onClick={async () => {
-                if (await unlockAudio()) playOnce('chime', 0.6)
-              }}
-            >
-              {audio ? <Check /> : <Volume2 />} {audio ? 'Alarm sound enabled' : 'Enable alarm sound'}
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-3 px-6 pt-4 sm:px-8">
+          <LogoMark size={28} />
+          <span className="flex-1 text-label-large text-on-surface-variant">
+            Step {step + 1} of {STEPS.length} · {STEPS[step]}
+          </span>
+          <Button variant="ghost" size="sm" className="-mr-3" onClick={skipAll}>
+            Skip setup
+          </Button>
+        </div>
 
-        {step === 1 && (
-          <div className="grid gap-4">
-            <h2 className="text-xl font-bold">Set a wake-up alarm</h2>
-            <Input type="time" value={wake.time} onChange={(e) => setWake({ ...wake, time: e.target.value || '06:30' })} className="tabular h-16 text-center text-4xl font-bold" />
-            <Field label="Repeat on">
-              <DayPicker value={wake.days} onChange={(days) => setWake({ ...wake, days })} weekStart={settings.weekStart} />
-            </Field>
-          </div>
-        )}
+        <div className="flex-1 px-6 pt-6 pb-4 sm:min-h-[420px] sm:px-8">
+          <h1 className="text-headline-small text-on-surface">{STEP_TEXT[step].title}</h1>
+          <p className="mt-2 text-body-medium text-on-surface-variant">{STEP_TEXT[step].text}</p>
 
-        {step === 2 && (
-          <div className="grid gap-4">
-            <h2 className="text-xl font-bold">Pick up to 3 good habits</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {SUGGESTED.map((h) => {
-                const on = habits.includes(h.name)
-                return (
-                  <button
-                    key={h.name}
-                    onClick={() => setHabits(on ? habits.filter((x) => x !== h.name) : habits.length < 3 ? [...habits, h.name] : habits)}
-                    className={cn(
-                      'flex items-center gap-2 rounded-xl border p-3 text-left text-sm transition-colors',
-                      on ? 'border-primary bg-primary/10 font-medium' : 'hover:bg-muted',
-                      !on && habits.length >= 3 && 'opacity-50',
-                    )}
-                  >
-                    <span className="text-xl">{h.icon}</span>
-                    {h.name}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground">{habits.length}/3 selected. You can add more later.</p>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="grid gap-4">
-            <h2 className="text-xl font-bold">Quit something? (optional)</h2>
-            <Field label="What do you want to quit?">
-              <Input value={quit.name} onChange={(e) => setQuit({ ...quit, name: e.target.value })} placeholder="Smoking, junk food, reels…" />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Cost per day (₹)">
-                <Input type="number" min={0} value={quit.cost} onChange={(e) => setQuit({ ...quit, cost: e.target.value })} />
-              </Field>
-              <Field label="Minutes wasted per day">
-                <Input type="number" min={0} value={quit.minutes} onChange={(e) => setQuit({ ...quit, minutes: e.target.value })} />
-              </Field>
-            </div>
-          </div>
-        )}
-
-        {step === 4 && (
-          <div className="grid gap-4">
-            <h2 className="text-xl font-bold">Choose your gym days</h2>
-            <div className="grid gap-2">
-              {orderedWeekdays(settings.weekStart).map((d) => (
-                <div key={d} className="grid grid-cols-[3rem_1fr] items-center gap-2">
-                  <span className="text-sm font-medium">{WEEKDAYS_SHORT[d]}</span>
-                  <Select
-                    value={gym[String(d)] ?? ''}
-                    onChange={(e) => {
-                      const g = { ...gym }
-                      if (e.target.value) g[String(d)] = e.target.value
-                      else delete g[String(d)]
-                      setGym(g)
+          <div className="mt-6">
+            {step === 0 && (
+              <div className="grid gap-3">
+                <PermissionCard icon={<Bell />} title="Notifications" text="Alarms and reminders pop up even when LifeOS is in the background." done={granted}>
+                  <Button variant={granted ? 'secondary' : 'default'} onClick={async () => setPerm(await requestNotifications())}>
+                    {granted ? <Check /> : <Bell />} {granted ? 'Notifications allowed' : 'Allow notifications'}
+                  </Button>
+                  {perm === 'denied' && (
+                    <p className="mt-2 text-body-small text-error">Blocked — you can allow notifications later in your browser settings.</p>
+                  )}
+                </PermissionCard>
+                <PermissionCard icon={<Volume2 />} title="Alarm sound" text="Browsers only play sound after a tap, so turn it on once now." done={audio}>
+                  <Button
+                    variant={audio ? 'secondary' : 'default'}
+                    onClick={async () => {
+                      if (await unlockAudio()) playOnce('chime', 0.6)
                     }}
-                    className="h-9"
                   >
-                    <option value="">Rest</option>
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                    {audio ? <Check /> : <Volume2 />} {audio ? 'Alarm sound enabled' : 'Enable alarm sound'}
+                  </Button>
+                </PermissionCard>
+              </div>
+            )}
 
-        <div className="mt-6 flex justify-between">
+            {step === 1 && (
+              <div className="grid gap-6">
+                <Field label="Wake-up time">
+                  <Input
+                    type="time"
+                    value={wake.time}
+                    onChange={(e) => setWake({ ...wake, time: e.target.value || '06:30' })}
+                    className="tabular h-20 text-center text-display-small"
+                  />
+                </Field>
+                <Field label="Repeat on" plain>
+                  <DayPicker value={wake.days} onChange={(days) => setWake({ ...wake, days })} weekStart={settings.weekStart} />
+                </Field>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="grid gap-3">
+                <div className="grid grid-cols-2 gap-2">
+                  {SUGGESTED.map((h) => {
+                    const on = habits.includes(h.name)
+                    const full = !on && habits.length >= 3
+                    return (
+                      <button
+                        key={h.name}
+                        type="button"
+                        aria-pressed={on}
+                        aria-disabled={full}
+                        onClick={() => setHabits(on ? habits.filter((x) => x !== h.name) : habits.length < 3 ? [...habits, h.name] : habits)}
+                        className={cn(
+                          'state-layer flex min-h-14 items-center gap-3 rounded-md px-3 py-2 text-left transition-colors',
+                          on ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container text-on-surface',
+                          full && 'opacity-40',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'flex size-9 shrink-0 items-center justify-center rounded-full text-title-large',
+                            on ? 'bg-surface-container-lowest/60' : 'bg-surface-container-highest',
+                          )}
+                          aria-hidden
+                        >
+                          {h.icon}
+                        </span>
+                        <span className="min-w-0 flex-1 text-label-large">{h.name}</span>
+                        {on && <Check className="size-5 shrink-0" />}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="px-1 text-body-small text-on-surface-variant">{habits.length} of 3 selected</p>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="grid gap-5">
+                <Field label="What do you want to quit?">
+                  <Input value={quit.name} onChange={(e) => setQuit({ ...quit, name: e.target.value })} placeholder="Smoking, junk food, reels…" />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Cost per day (₹)">
+                    <Input type="number" min={0} value={quit.cost} onChange={(e) => setQuit({ ...quit, cost: e.target.value })} />
+                  </Field>
+                  <Field label="Minutes wasted per day">
+                    <Input type="number" min={0} value={quit.minutes} onChange={(e) => setQuit({ ...quit, minutes: e.target.value })} />
+                  </Field>
+                </div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="overflow-hidden rounded-lg bg-surface-container [--field-bg:var(--md-surface-container)]">
+                {orderedWeekdays(settings.weekStart).map((d, i) => {
+                  const workout = Boolean(gym[String(d)])
+                  return (
+                    <div key={d}>
+                      {i > 0 && <Divider className="ml-[72px]" />}
+                      <div className="flex items-center gap-4 px-4 py-2">
+                        <span
+                          className={cn(
+                            'flex size-10 shrink-0 items-center justify-center rounded-full',
+                            workout ? 'bg-primary text-on-primary' : 'bg-surface-container-highest text-on-surface-variant',
+                          )}
+                        >
+                          <span className="text-label-large">{WEEKDAYS_SHORT[d]}</span>
+                        </span>
+                        <Select
+                          aria-label={`Workout on ${WEEKDAYS_SHORT[d]}`}
+                          value={gym[String(d)] ?? ''}
+                          onChange={(e) => {
+                            const g = { ...gym }
+                            if (e.target.value) g[String(d)] = e.target.value
+                            else delete g[String(d)]
+                            setGym(g)
+                          }}
+                          className="h-12 flex-1"
+                        >
+                          <option value="">Rest</option>
+                          {templates.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 px-6 pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:px-8 sm:pb-8">
           <Button variant="ghost" onClick={() => setStep(step - 1)} disabled={step === 0}>
             Back
           </Button>
@@ -215,7 +295,7 @@ export function OnboardingPage() {
             </Button>
           )}
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

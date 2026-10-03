@@ -51,6 +51,7 @@ export function Field({
   /** Helper text under the field */
   supporting?: React.ReactNode
 }) {
+  const autoId = React.useId()
   if (plain)
     return (
       <div className={cn('grid gap-2', className)}>
@@ -59,15 +60,24 @@ export function Field({
         {supporting && <div className="px-1 text-body-small text-on-surface-variant">{supporting}</div>}
       </div>
     )
+  // Give the label a target: reuse the control's id or inject one.
+  const only = React.Children.count(children) === 1 && React.isValidElement<{ id?: string; 'aria-describedby'?: string }>(children) ? children : null
+  const id = only?.props.id ?? autoId
+  const helpId = supporting ? `${id}-help` : undefined
+  const control = only ? React.cloneElement(only, { id, 'aria-describedby': only.props['aria-describedby'] ?? helpId }) : children
   return (
     <div className={cn('group grid gap-1', className)}>
       <div className="relative">
-        <label className="pointer-events-none absolute -top-2 left-3 z-10 max-w-[calc(100%-1.5rem)] truncate bg-[var(--field-bg,var(--md-surface))] px-1 text-body-small text-on-surface-variant transition-colors group-focus-within:text-primary">
+        <label htmlFor={only ? id : undefined} className="pointer-events-none absolute -top-2 left-3 z-10 max-w-[calc(100%-1.5rem)] truncate bg-[var(--field-bg,var(--md-surface))] px-1 text-body-small text-on-surface-variant transition-colors group-focus-within:text-primary">
           {label}
         </label>
-        {children}
+        {control}
       </div>
-      {supporting && <div className="px-4 text-body-small text-on-surface-variant">{supporting}</div>}
+      {supporting && (
+        <div id={helpId} className="px-4 text-body-small text-on-surface-variant">
+          {supporting}
+        </div>
+      )}
     </div>
   )
 }
@@ -145,7 +155,7 @@ export function Checkbox({
           checked ? 'border-primary bg-primary text-on-primary' : 'border-on-surface-variant',
         )}
       >
-        {checked && <Check className="size-3.5 text-white" />}
+        {checked && <Check className={cn('size-3.5', color ? 'text-white' : 'text-on-primary')} />}
       </span>
     </button>
   )
@@ -169,7 +179,10 @@ export function Segmented<T extends string>({
   className?: string
 }) {
   return (
-    <div role="radiogroup" className={cn('inline-flex h-10 max-w-full overflow-x-auto rounded-full border border-outline no-scrollbar', className)}>
+    <div
+      role="radiogroup"
+      className={cn('inline-grid h-10 max-w-full auto-cols-fr grid-flow-col overflow-x-auto rounded-full border border-outline no-scrollbar', className)}
+    >
       {options.map((o, i) => {
         const on = value === o.value
         return (
@@ -180,7 +193,7 @@ export function Segmented<T extends string>({
             aria-checked={on}
             onClick={() => onChange(o.value)}
             className={cn(
-              'state-layer flex min-w-12 flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-3 text-label-large transition-colors [&_svg]:size-[18px]',
+              'state-layer flex min-w-12 items-center justify-center gap-1.5 whitespace-nowrap px-3 text-label-large transition-colors [&_svg]:size-[18px]',
               i > 0 && 'border-l border-outline',
               on ? 'bg-secondary-container text-on-secondary-container' : 'text-on-surface',
             )}

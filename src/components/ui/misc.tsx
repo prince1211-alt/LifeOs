@@ -156,6 +156,7 @@ export function PageHeader({
           type="button"
           onClick={fab.onClick}
           aria-label={fab.label}
+          data-page-fab
           className="state-layer fixed right-4 bottom-[calc(96px+env(safe-area-inset-bottom))] z-30 inline-flex h-14 items-center gap-3 rounded-lg bg-primary-container pr-5 pl-4 text-label-large text-on-primary-container shadow-elevation-3 md:hidden [&_svg]:size-6"
         >
           {fab.icon}

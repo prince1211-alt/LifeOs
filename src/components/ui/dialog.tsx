@@ -52,7 +52,7 @@ export function Dialog({
           <span className="h-1 w-8 rounded-full bg-on-surface-variant/40" />
         </div>
         <div className={cn('flex items-start gap-3 px-6 pt-3 pb-4 sm:pt-6', icon && 'flex-col items-center text-center')}>
-          {icon && <div className="text-secondary [&_svg]:size-6">{icon}</div>}
+          {icon && <div className="text-[var(--md-secondary)] [&_svg]:size-6">{icon}</div>}
           <h2 className="min-w-0 flex-1 text-headline-small text-on-surface">{title}</h2>
           {!icon && (
             <Button size="icon" variant="ghost" onClick={onClose} aria-label="Close" className="-mt-1 -mr-3">
@@ -63,7 +63,7 @@ export function Dialog({
         <div className="overflow-y-auto px-6 pt-2 pb-4 text-body-medium text-on-surface-variant">
           <div className="text-on-surface">{children}</div>
         </div>
-        {footer && <div className="flex flex-wrap items-center justify-end gap-2 px-6 pt-2 pb-6 pb-safe">{footer}</div>}
+        {footer && <div className="flex flex-wrap items-center justify-end gap-2 px-6 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">{footer}</div>}
       </div>
     </div>,
     document.body,

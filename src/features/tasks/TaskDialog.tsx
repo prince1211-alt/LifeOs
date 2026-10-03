@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, X } from '@/components/icons'
+import { Check, Plus, Trash2, X } from '@/components/icons'
 import { Dialog } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Checkbox, DayPicker, Field, Input, Select, Switch, Textarea } from '@/components/ui/form'
+import { Button, IconButton } from '@/components/ui/button'
+import { Checkbox, DayPicker, Field, Input, Segmented, Select, Switch, Textarea } from '@/components/ui/form'
 import type { Priority, RecurrenceKind, Task } from '@/lib/types'
 import { save } from '@/lib/repo'
-import { cn, uid, ymd } from '@/lib/utils'
+import { uid, ymd } from '@/lib/utils'
 import { useSettings } from '@/lib/hooks'
 import { deleteTask, newTask, PRIORITY_COLORS } from './actions'
 
@@ -19,6 +19,19 @@ const REMINDERS = [
   { v: '60', l: '1 hour before' },
   { v: '1440', l: '1 day before' },
 ]
+
+const PRIORITY_OPTIONS = ([1, 2, 3, 4] as Priority[]).map((p) => ({
+  value: String(p),
+  label: (
+    <>
+      <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: PRIORITY_COLORS[p] }} />P{p}
+    </>
+  ),
+}))
+
+/** Borderless text input for checklist rows; the underline appears on focus. */
+const STEP_INPUT =
+  'h-10 min-w-0 flex-1 border-b border-transparent bg-transparent text-body-large outline-none transition-colors placeholder:text-on-surface-variant focus:border-primary focus-visible:outline-none'
 
 export function TaskDialog({
   task,
@@ -76,7 +89,7 @@ export function TaskDialog({
           {task && (
             <Button
               variant="ghost"
-              className="mr-auto text-destructive"
+              className="mr-auto -ml-3 text-error"
               onClick={async () => {
                 await deleteTask(task)
                 onClose()
@@ -88,14 +101,14 @@ export function TaskDialog({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!draft.title?.trim()}>
+          <Button variant="ghost" onClick={submit} disabled={!draft.title?.trim()}>
             Save
           </Button>
         </>
       }
     >
       <form
-        className="grid gap-4"
+        className="grid gap-5 pt-2"
         onSubmit={(e) => {
           e.preventDefault()
           submit()
@@ -115,55 +128,49 @@ export function TaskDialog({
             <Input type="time" value={draft.dueTime ?? ''} onChange={(e) => set({ dueTime: e.target.value || null })} />
           </Field>
         </div>
-        <Field label="Priority">
-          <div className="flex gap-2">
-            {([1, 2, 3, 4] as Priority[]).map((p) => (
-              <button
-                type="button"
-                key={p}
-                onClick={() => set({ priority: p })}
-                className={cn(
-                  'h-9 flex-1 rounded-md border text-sm font-semibold transition-colors',
-                  draft.priority === p ? 'border-transparent text-white' : 'hover:bg-muted',
-                )}
-                style={draft.priority === p ? { background: PRIORITY_COLORS[p] } : { color: PRIORITY_COLORS[p] }}
-              >
-                P{p}
-              </button>
-            ))}
-          </div>
+        <Field label="Priority" plain>
+          <Segmented
+            value={String(draft.priority ?? 4)}
+            onChange={(v) => set({ priority: Number(v) as Priority })}
+            options={PRIORITY_OPTIONS}
+            className="w-full"
+          />
         </Field>
-        <Field label="Tags (comma separated)">
+        <Field label="Tags" supporting="Separate with commas">
           <Input value={tagText} onChange={(e) => setTagText(e.target.value)} placeholder="work, health" />
         </Field>
-        <Field label="Subtasks">
-          <div className="grid gap-1.5">
+        <Field label="Subtasks" plain>
+          <div className="grid">
             {(draft.subtasks ?? []).map((s) => (
-              <div key={s.id} className="flex items-center gap-2">
+              <div key={s.id} className="flex items-center gap-4 pl-2">
                 <Checkbox
                   checked={s.done}
+                  label={s.title || 'Step'}
                   onChange={(v) => set({ subtasks: draft.subtasks!.map((x) => (x.id === s.id ? { ...x, done: v } : x)) })}
                 />
-                <Input
-                  className="h-8"
+                <input
+                  aria-label="Step"
+                  className={
+                    s.done ? `${STEP_INPUT} text-on-surface-variant line-through` : `${STEP_INPUT} text-on-surface`
+                  }
                   value={s.title}
                   onChange={(e) =>
                     set({ subtasks: draft.subtasks!.map((x) => (x.id === s.id ? { ...x, title: e.target.value } : x)) })
                   }
                 />
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
+                <IconButton
+                  label="Remove subtask"
                   onClick={() => set({ subtasks: draft.subtasks!.filter((x) => x.id !== s.id) })}
-                  aria-label="Remove subtask"
                 >
                   <X />
-                </Button>
+                </IconButton>
               </div>
             ))}
-            <div className="flex gap-2">
-              <Input
-                className="h-8"
+            <div className="flex items-center gap-4 pl-2">
+              <Plus className="text-primary" />
+              <input
+                aria-label="Add a step"
+                className={`${STEP_INPUT} text-on-surface`}
                 value={subText}
                 onChange={(e) => setSubText(e.target.value)}
                 onKeyDown={(e) => {
@@ -174,54 +181,55 @@ export function TaskDialog({
                 }}
                 placeholder="Add a step"
               />
-              <Button size="sm" variant="outline" onClick={addSub}>
-                <Plus />
-              </Button>
+              <IconButton label="Add step" onClick={addSub} disabled={!subText.trim()}>
+                <Check />
+              </IconButton>
             </div>
           </div>
         </Field>
-        <Field label="Repeat">
-          <Select
-            value={rec.kind}
-            onChange={(e) => {
-              const kind = e.target.value as RecurrenceKind
-              set({
-                recurrence: {
-                  kind,
-                  days: kind === 'weekly' || kind === 'custom' ? rec.days ?? [] : undefined,
-                  interval: kind === 'custom' ? rec.interval ?? 2 : undefined,
-                },
-                dueDate: kind !== 'none' && !draft.dueDate ? ymd() : draft.dueDate,
-              })
-            }}
-          >
-            <option value="none">Does not repeat</option>
-            <option value="daily">Daily</option>
-            <option value="weekdays">Weekdays (Mon–Fri)</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
-            <option value="custom">Custom</option>
-          </Select>
-        </Field>
-        {(rec.kind === 'weekly' || rec.kind === 'custom') && (
-          <div className="grid gap-2">
+        <div className="grid gap-3">
+          <Field label="Repeat">
+            <Select
+              value={rec.kind}
+              onChange={(e) => {
+                const kind = e.target.value as RecurrenceKind
+                set({
+                  recurrence: {
+                    kind,
+                    days: kind === 'weekly' || kind === 'custom' ? rec.days ?? [] : undefined,
+                    interval: kind === 'custom' ? rec.interval ?? 2 : undefined,
+                  },
+                  dueDate: kind !== 'none' && !draft.dueDate ? ymd() : draft.dueDate,
+                })
+              }}
+            >
+              <option value="none">Does not repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekdays">Weekdays (Mon–Fri)</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="custom">Custom</option>
+            </Select>
+          </Field>
+          {(rec.kind === 'weekly' || rec.kind === 'custom') && (
             <DayPicker value={rec.days ?? []} onChange={(days) => set({ recurrence: { ...rec, days } })} weekStart={settings.weekStart} />
-            {rec.kind === 'custom' && !(rec.days ?? []).length && (
-              <div className="flex items-center gap-2 text-sm">
-                Every
-                <Input
-                  type="number"
-                  min={1}
-                  className="h-8 w-20"
-                  value={rec.interval ?? 1}
-                  onChange={(e) => set({ recurrence: { ...rec, interval: Math.max(1, Number(e.target.value) || 1) } })}
-                />
-                days
-              </div>
-            )}
-          </div>
-        )}
-        <Field label="Reminder">
+          )}
+          {rec.kind === 'custom' && !(rec.days ?? []).length && (
+            <div className="flex items-center gap-3 text-body-large text-on-surface">
+              Every
+              <Input
+                type="number"
+                min={1}
+                aria-label="Repeat every N days"
+                className="h-10 w-20 text-center"
+                value={rec.interval ?? 1}
+                onChange={(e) => set({ recurrence: { ...rec, interval: Math.max(1, Number(e.target.value) || 1) } })}
+              />
+              days
+            </div>
+          )}
+        </div>
+        <Field label="Reminder" supporting={draft.dueTime ? undefined : 'Set a time to get a reminder.'}>
           <Select
             value={draft.reminderMinutesBefore == null ? '' : String(draft.reminderMinutesBefore)}
             onChange={(e) => set({ reminderMinutesBefore: e.target.value === '' ? null : Number(e.target.value) })}
@@ -233,11 +241,13 @@ export function TaskDialog({
               </option>
             ))}
           </Select>
-          {!draft.dueTime && <span className="text-xs text-muted-foreground">Set a time to get a reminder.</span>}
         </Field>
-        <label className="flex items-center justify-between text-sm">
-          Must do today (pinned)
-          <Switch checked={Boolean(draft.pinned)} onChange={(pinned) => set({ pinned })} />
+        <label className="flex min-h-14 cursor-pointer items-center justify-between gap-4">
+          <span>
+            <span className="block text-body-large text-on-surface">Must do today (pinned)</span>
+            <span className="block text-body-medium text-on-surface-variant">Pinned tasks stay at the top of your lists</span>
+          </span>
+          <Switch label="Must do today (pinned)" checked={Boolean(draft.pinned)} onChange={(pinned) => set({ pinned })} />
         </label>
         <button type="submit" className="hidden" />
       </form>
