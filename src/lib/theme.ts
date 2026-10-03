@@ -11,6 +11,7 @@ import {
   hexFromArgb,
 } from '@material/material-color-utilities'
 import type { Settings } from './types'
+import { setSystemBarsForTheme } from './native/platform'
 
 export const DEFAULT_SEED = '#0b57d0' // Google blue
 
@@ -140,6 +141,7 @@ export function applyTheme(theme: Settings['theme'], seed: string = DEFAULT_SEED
   }
   const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   document.documentElement.classList.toggle('dark', dark)
+  setSystemBarsForTheme(dark)
   const bar = getComputedStyle(document.documentElement).getPropertyValue('--md-surface-container').trim()
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bar || (dark ? '#111318' : '#f8f9ff'))
 }

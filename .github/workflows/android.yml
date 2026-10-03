@@ -1,0 +1,115 @@
+# Builds the LifeOS Android app (APK) and publishes it as a GitHub Release.
+# Download link (after the first signed build on main):
+#   https://github.com/<owner>/<repo>/releases/latest/download/LifeOS.apk
+#
+# Repository settings (Settings → Secrets and variables → Actions):
+#   Secret   LIFEOS_KEYSTORE_PASSWORD  – any long password you choose. The first build on main creates the
+#                                        signing key android/app/lifeos-release.p12 with it and commits it.
+#   Variable VITE_GOOGLE_CLIENT_ID     – the Web OAuth client ID (enables Google sign-in in the app)
+name: Android APK
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID || secrets.VITE_GOOGLE_CLIENT_ID }}
+      LIFEOS_KEYSTORE_PASSWORD: ${{ secrets.LIFEOS_KEYSTORE_PASSWORD }}
+      LIFEOS_VERSION_CODE: ${{ github.run_number }}
+      LIFEOS_VERSION_NAME: 1.0.${{ github.run_number }}
+      KEYSTORE: android/app/lifeos-release.p12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Create the signing key (first signed build on main only)
+        if: github.ref == 'refs/heads/main' && env.LIFEOS_KEYSTORE_PASSWORD != ''
+        run: |
+          if [ -f "$KEYSTORE" ]; then echo "Signing key already exists."; exit 0; fi
+          keytool -genkeypair -noprompt -storetype PKCS12 -keystore "$KEYSTORE" -alias lifeos \
+            -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=LifeOS, O=LifeOS Personal" \
+            -storepass:env LIFEOS_KEYSTORE_PASSWORD -keypass:env LIFEOS_KEYSTORE_PASSWORD
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$KEYSTORE"
+          git commit -m "Add Android signing key (encrypted with the LIFEOS_KEYSTORE_PASSWORD secret)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Copy web app into Android project
+        run: npx cap sync android
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          if [ -n "$LIFEOS_KEYSTORE_PASSWORD" ] && [ -f "../$KEYSTORE" ]; then
+            ./gradlew --no-daemon assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk ../LifeOS.apk
+            echo "SIGNED=true" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No signing key yet (add the LIFEOS_KEYSTORE_PASSWORD secret and build main). This test APK uses a temporary debug key: updates won't install over it and Google sign-in won't work."
+            ./gradlew --no-daemon assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk ../LifeOS.apk
+            echo "SIGNED=false" >> "$GITHUB_ENV"
+          fi
+          if [ -z "$VITE_GOOGLE_CLIENT_ID" ]; then
+            echo "::warning::Variable VITE_GOOGLE_CLIENT_ID is not set: the app works on this device only (no Google sign-in)."
+          fi
+
+      - name: Show signing certificate
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$APKSIGNER" verify --print-certs LifeOS.apk | tee certs.txt
+          echo "CERT_SHA1=$(grep -m1 'SHA-1 digest' certs.txt | awk '{print $NF}' | sed 's/../&:/g; s/:$//' | tr a-f A-F)" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeOS-${{ env.LIFEOS_VERSION_NAME }}
+          path: LifeOS.apk
+          if-no-files-found: error
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/main' && env.SIGNED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "android-v${LIFEOS_VERSION_NAME}" LifeOS.apk \
+            --title "LifeOS for Android ${LIFEOS_VERSION_NAME}" \
+            --target "$GITHUB_SHA" \
+            --latest \
+            --notes "**Install:** open this page on your Android phone, tap **LifeOS.apk**, then allow installing from your browser if asked. Updates install over the previous version and keep your data.
+
+          **Google sign-in setup:** Google Cloud → Google Auth Platform → Clients → Create client → Android. Package name \`app.lifeos.android\`, SHA-1 \`${CERT_SHA1}\`."

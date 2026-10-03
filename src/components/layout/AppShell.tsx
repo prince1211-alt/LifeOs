@@ -241,7 +241,7 @@ export function AppShell() {
       {/* Top app bar */}
       <header
         className={cn(
-          'sticky top-0 z-30 flex h-16 items-center gap-1 px-2 transition-colors duration-200 md:bg-surface-container md:px-3',
+          'sticky top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] items-center gap-1 px-2 pt-[env(safe-area-inset-top)] transition-colors duration-200 md:bg-surface-container md:px-3',
           scrolled ? 'bg-surface-container' : 'bg-surface',
         )}
       >
@@ -274,7 +274,7 @@ export function AppShell() {
         {/* Navigation drawer (large) / rail (medium) */}
         <aside
           className={cn(
-            'sticky top-16 hidden h-[calc(100vh-4rem)] shrink-0 flex-col gap-1 overflow-y-auto pb-4 no-scrollbar md:flex',
+            'sticky top-[calc(4rem+env(safe-area-inset-top))] hidden h-[calc(100vh-4rem-env(safe-area-inset-top))] shrink-0 flex-col gap-1 overflow-y-auto pb-4 no-scrollbar md:flex',
             rail ? 'w-20 items-center px-2' : 'w-64 px-3',
           )}
         >

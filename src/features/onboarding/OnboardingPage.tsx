@@ -90,7 +90,7 @@ export function OnboardingPage() {
 
   if (user?.mode === 'google' && sync.status === 'syncing' && !sync.lastSyncedAt)
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-surface px-6 text-center">
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-surface px-6 pt-[env(safe-area-inset-top)] text-center">
         <LogoMark size={56} />
         <Loader2 className="size-10 animate-spin text-primary" />
         <p className="text-body-large text-on-surface-variant">Loading your LifeOS data from Google Drive…</p>
@@ -126,7 +126,7 @@ export function OnboardingPage() {
   const granted = perm === 'granted'
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface sm:items-center sm:justify-center sm:p-6">
+    <div className="flex min-h-dvh flex-col bg-surface pt-[env(safe-area-inset-top)] sm:items-center sm:justify-center sm:p-6">
       <div className="flex w-full flex-1 flex-col overflow-hidden [--field-bg:var(--md-surface)] sm:max-w-[560px] sm:flex-none sm:rounded-xl sm:bg-surface-container-low sm:[--field-bg:var(--md-surface-container-low)]">
         <div className="sm:px-8 sm:pt-6">
           <Progress value={(step + 1) / STEPS.length} />

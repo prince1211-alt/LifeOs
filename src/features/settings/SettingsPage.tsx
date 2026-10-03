@@ -39,7 +39,7 @@ import { Dialog, useConfirm } from '@/components/ui/dialog'
 import { Checkbox, Field, Input, Segmented, Select, Switch } from '@/components/ui/form'
 import { Badge, Divider, ListItem, PageHeader, SectionTitle } from '@/components/ui/misc'
 import { SOUNDS, playOnce, unlockAudio } from '@/lib/audio'
-import { notificationPermission, notify, requestNotifications } from '@/lib/notify'
+import { notificationPermission, requestNotifications, sendTestNotification } from '@/lib/notify'
 import { useApp, toast, type UserProfile } from '@/store/app'
 import { clearLocalData, deleteRemoteData, fullSync, syncDirty } from '@/lib/sync'
 import { exportAll, importAll } from '@/lib/data'
@@ -52,6 +52,7 @@ import { mirrorAllAlarms } from '../alarms/actions'
 import { createTask } from '../tasks/actions'
 import { getDirty } from '@/lib/repo'
 import { promptInstall, useInstallPrompt } from '@/lib/install'
+import { ANDROID_APK_URL, isNative } from '@/lib/native/platform'
 
 const set = (p: Partial<Settings>) => save('settings', { id: 'settings', ...p })
 
@@ -551,7 +552,7 @@ export function SettingsPage() {
               const p = await requestNotifications()
               setPerm(p)
               playOnce('chime')
-              await notify('LifeOS test', 'Notifications and sound are working 🎉', { tag: 'test' })
+              await sendTestNotification()
               if (p !== 'granted') toast('Sound played, but notifications are not allowed')
             }}
           >
@@ -676,6 +677,21 @@ export function SettingsPage() {
             </>
           }
         />
+        {!isNative && (
+          <ListItem
+            leading={<Smartphone />}
+            headline="Android app"
+            supporting="Alarms and reminders ring even when the app is closed"
+            trailing={
+              <a
+                href={ANDROID_APK_URL}
+                className="state-layer inline-flex h-8 items-center rounded-full border border-outline px-4 text-label-large text-primary"
+              >
+                Download
+              </a>
+            }
+          />
+        )}
         {installEvt && (
           <ListItem
             leading={<Smartphone />}

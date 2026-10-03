@@ -64,7 +64,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface sm:items-center sm:justify-center sm:p-6">
+    <div className="flex min-h-dvh flex-col bg-surface pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:items-center sm:justify-center sm:p-6">
       <main className="flex w-full flex-1 flex-col px-6 pt-12 pb-8 sm:max-w-[480px] sm:flex-none sm:rounded-xl sm:bg-surface-container-low sm:p-10 md:max-w-[1040px]">
         <div className="grid gap-10 md:grid-cols-2 md:gap-12">
           <div>
@@ -98,7 +98,7 @@ export function LoginPage() {
               </Button>
               {!configured && (
                 <p className="px-2 text-center text-body-small text-on-surface-variant">
-                  Google sign-in needs <code>VITE_GOOGLE_CLIENT_ID</code> in <code>.env</code> (see README).
+                  Google sign-in isn't set up in this build (it needs <code>VITE_GOOGLE_CLIENT_ID</code>; see README).
                 </p>
               )}
               {error && (
